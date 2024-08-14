@@ -15,7 +15,6 @@ namespace STORE_VIDEO_APP
         private ConcurrentDictionary<string, SerialPort> _serialDevices = new ConcurrentDictionary<string, SerialPort>();
         private readonly string _pid = AppConfig.GetStringValue("ProductID");
         private readonly string _vid = AppConfig.GetStringValue("VendorID");
-        private static HashSet<string> _previousDeviceIds = new HashSet<string>();
         private List<string> ListCOMPorts
         {
             get
@@ -69,6 +68,12 @@ namespace STORE_VIDEO_APP
         {
             try
             {
+                if(_dataBuffers.TryGetValue(portName, out var data))
+                {
+                    MainLogger.Warn($"Đã kết nối cổng{portName} trước đó!");
+                    return;
+                }
+
                 string deviceID = GetIDFromPort(portName);
                 string serialProductKey = $"VID_{_vid}&PID_{_pid}";
 

@@ -61,7 +61,7 @@ namespace CameraServices
             _bInitSDK = CHCNetSDK.NET_DVR_Init();
             if (_bInitSDK == false)
             {
-                MainLogger.Info("NET_DVR_Init error!");
+                VideoLogger.Info("NET_DVR_Init error!");
                 return;
             }
             else
@@ -97,13 +97,13 @@ namespace CameraServices
                         {
                             iLastErr = CHCNetSDK.NET_DVR_GetLastError();
                             _str1 = "NET_DVR_Login_V30 failed, error code= " + iLastErr; //Login failed,print error code
-                            MainLogger.Error(_str1);
-                            MainLogger.Error($"Camera {_ip}:{_port} ==> Login Failed!");
+                            VideoLogger.Error(_str1);
+                            VideoLogger.Error($"Camera {_ip}:{_port} ==> Login Failed!");
                             return false;
                         }
                         else
                         {
-                            MainLogger.Info($"Camera {_ip}:{_port} ==> Login Succesfully!");
+                            VideoLogger.Info($"Camera {_ip}:{_port} ==> Login Succesfully!");
                             dwAChanTotalNum = (uint)DeviceInfo.byChanNum;
                             dwDChanTotalNum = (uint)DeviceInfo.byIPChanNum + 256 * (uint)DeviceInfo.byHighDChanNum;
 
@@ -126,7 +126,7 @@ namespace CameraServices
                     }
                     catch (Exception ex)
                     {
-                        MainLogger.Error("Login ex " + ex);
+                        VideoLogger.Error("Login ex " + ex);
                     }
                 }
             }
@@ -145,7 +145,7 @@ namespace CameraServices
             {
                 iLastErr = CHCNetSDK.NET_DVR_GetLastError();
                 _str1 = "NET_DVR_GET_IPPARACFG_V40 failed, error code= " + iLastErr; //Get IP parameter of configuration failed,print error code.
-                MainLogger.Info(_str1);
+                VideoLogger.Info(_str1);
             }
             else
             {
@@ -249,7 +249,7 @@ namespace CameraServices
             }
             catch (Exception ex)
             {
-                MainLogger.Info(ex);
+                VideoLogger.Info(ex);
             }
         }
 
@@ -281,24 +281,24 @@ namespace CameraServices
                             string cmd = string.Format("-i \"{0}\" -vcodec libx265 -crf 28 \"{1}\"", originalVideoPath, outputFilePath);
                             try
                             {
-                                MainLogger.Info($"Start resizing file ...");
+                                VideoLogger.Info($"Start resizing file ...");
                                 ExecuteFFmpegCommand(cmd, out string duration);
                                 if (File.Exists(outputFilePath) && new FileInfo(outputFilePath).Length > 0)
                                 {
-                                    MainLogger.Info($"Resized file {outputFilePath} successfully");
+                                    VideoLogger.Info($"Resized file {outputFilePath} successfully");
                                     VideoPaths.Add(outputFilePath);
                                     break;
                                 }
                             }
                             catch (Exception ex)
                             {
-                                MainLogger.Error(ex);
+                                VideoLogger.Error(ex);
                                 Thread.Sleep(5000);
                             }
                         }
                         else
                         {
-                            MainLogger.Error($"File {originalVideoPath} render failed!");
+                            VideoLogger.Error($"File {originalVideoPath} render failed!");
                             Thread.Sleep(5000);
                         }
                     }
@@ -307,7 +307,7 @@ namespace CameraServices
             }
             catch (Exception ex)
             {
-                MainLogger.Error(ex);
+                VideoLogger.Error(ex);
             }
             finally
             {
@@ -332,7 +332,7 @@ namespace CameraServices
             {
                 if (_lDownHandle >= 0)
                 {
-                    MainLogger.Info("Downloading, please stop firstly!");//Please stop downloading
+                    VideoLogger.Info("Downloading, please stop firstly!");//Please stop downloading
                     return null;
                 }
 
@@ -362,7 +362,7 @@ namespace CameraServices
                 if (!Directory.Exists(videoFolderPath))
                 {
                     Directory.CreateDirectory(videoFolderPath);
-                    MainLogger.Info($"Created path: {videoFolderPath}");
+                    VideoLogger.Info($"Created path: {videoFolderPath}");
                 }
 
                 //Download by time
@@ -371,7 +371,7 @@ namespace CameraServices
                 {
                     iLastErr = CHCNetSDK.NET_DVR_GetLastError();
                     _str = "NET_DVR_GetFileByTime_V40 failed, error code= " + iLastErr;
-                    MainLogger.Error(_str);
+                    VideoLogger.Error(_str);
                     Debug.WriteLine(_str);
                     return null;
                 }
@@ -381,7 +381,7 @@ namespace CameraServices
                 {
                     iLastErr = CHCNetSDK.NET_DVR_GetLastError();
                     _str = "NET_DVR_PLAYSTART failed, error code= " + iLastErr; //Download controlling failed,print error code
-                    MainLogger.Error(_str);
+                    VideoLogger.Error(_str);
                     return null;
                 }
 
@@ -391,7 +391,7 @@ namespace CameraServices
                     {
                         TimeSpan expectedDuration = TimeSpan.Parse((endTime - startTime).ToString(@"hh\:mm\:ss"));//Thời lượng video dự kiến nếu render thành công
                         ExecuteFFmpegCommand($"-i \"{fullFilePath}\"", out string duration);
-                        MainLogger.Info($"Created file => {fullFilePath}");
+                        VideoLogger.Info($"Created file => {fullFilePath}");
                         if (TimeSpan.TryParse(duration, out TimeSpan actualDuration))
                         {
                             //Tính xem thời lượng 2 video chênh lệch nhiều không 
@@ -404,27 +404,27 @@ namespace CameraServices
                             if (difference > fiftyPercentOfA)
                             {
                                 isVideoCorrupted = true;
-                                MainLogger.Error($"!!! WARNING: Video was corrupted");
-                                MainLogger.Error($"Expected duration: {expectedDuration} | Actual duration: {duration}");
+                                VideoLogger.Error($"!!! WARNING: Video was corrupted");
+                                VideoLogger.Error($"Expected duration: {expectedDuration} | Actual duration: {duration}");
                             }
                         }
                         else
                         {
-                            MainLogger.Info($"Video duration: {duration}");
+                            VideoLogger.Info($"Video duration: {duration}");
                         }
                         return fullFilePath;
                     }
                     else
                     {
-                        MainLogger.Error($"Render failed. Retry...");
+                        VideoLogger.Error($"Render failed. Retry...");
                         //Thread.Sleep(5000);
                     }
                 }
             }
             catch (Exception ex)
             {
-                MainLogger.Error("GetOriginalVideoPath ex");
-                MainLogger.Error(ex);
+                VideoLogger.Error("GetOriginalVideoPath ex");
+                VideoLogger.Error(ex);
             }
             return null;
         }
@@ -447,7 +447,7 @@ namespace CameraServices
                     {
                         iLastErr = CHCNetSDK.NET_DVR_GetLastError();
                         _str = "NET_DVR_StopGetFile failed, error code= " + iLastErr; // Download controlling failed, print error code
-                        MainLogger.Error(_str);
+                        VideoLogger.Error(_str);
                         return false;
                     }
                     _lDownHandle = -1;
@@ -456,7 +456,7 @@ namespace CameraServices
 
                 if (iPos == 200) // Network abnormal, download failed
                 {
-                    MainLogger.Error("The downloading is abnormal due to the abnormal network!");
+                    VideoLogger.Error("The downloading is abnormal due to the abnormal network!");
                     return false;
                 }
             }
@@ -470,7 +470,7 @@ namespace CameraServices
             }
             catch (Exception ex)
             {
-                MainLogger.Error(ex);
+                VideoLogger.Error(ex);
             }
             return string.Empty;
         }
