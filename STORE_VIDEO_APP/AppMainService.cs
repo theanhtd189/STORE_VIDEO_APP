@@ -38,7 +38,7 @@ namespace STORE_VIDEO_APP
             MainLogger.Info("Start application - main service");
             InitializeScannerService();
             InitializePipeService();
-            //if (AppConfig.GetBooleanValue("EnableTest"))
+            if (AppConfig.GetBooleanValue("EnableTest"))
             {
                 InitializeTestService();
             }
@@ -48,7 +48,6 @@ namespace STORE_VIDEO_APP
         {
             try
             {
-                Thread.Sleep(2000);
                 TestProgram();
             }
             catch (Exception ex)
@@ -59,7 +58,7 @@ namespace STORE_VIDEO_APP
 
         public async void ProcessCode(string scannerCode, string inputCode)
         {
-            MainLogger.Info($"ProcessCode({scannerCode},{inputCode})");
+            MainLogger.Info($"ProcessCode({scannerCode},{inputCode.ToJson()})");
             try
             {
                 QRData qrData = GetQRData(inputCode);
@@ -101,13 +100,12 @@ namespace STORE_VIDEO_APP
         {
             try
             {
+                MainLogger.Info($"ProcessStartSession({scannerCode},{qrData.ToJson()})");
                 if (qrData == null)
                 {
                     return;
                 }
                 MainLogger.Info($"Đăng ký ca làm việc! MaNV = {qrData.UserId}");
-                MainLogger.Info($"CreateSession({scannerCode},{qrData})");
-                
                 Session currentSession = null;
                 string userId = qrData.UserId;
                 int deskId = qrData.DeskId;
@@ -205,22 +203,20 @@ namespace STORE_VIDEO_APP
         {
             try
             {
+                MainLogger.Info($"ProcessStartOrder({scannerCode},{qrData.ToJson()})");
                 if (qrData == null)
                 {
                     return;
                 }
-
-                MainLogger.Info($"Bắt đầu đóng gói hàng {qrData.OrderCode}");
-                MainLogger.Info($"StartOrder({scannerCode},{qrData.ToString()})");
-
                 string newOrderCode = qrData.OrderCode;
                 if (_listSession.Keys.Contains(scannerCode))
                 {
                     var session = _listSession[scannerCode];
 
+                    //trước đó có đơn hàng đang đóng mà chưa quét mã kết thúc
                     if (session?.CurrentOrder != null)
                     {
-                        //trước đó có đơn hàng đang đóng mà chưa quét mã kết thúc
+                        
                         var isOrderCreated = session.CurrentOrder.OrderCode == newOrderCode;
                         if (isOrderCreated)
                         {
@@ -234,7 +230,7 @@ namespace STORE_VIDEO_APP
                             await EndOrderSession(session);
                         }
                     }
-                    else
+                    
                     {
                         //khong co don hang nao dang dong goi
                         session.CurrentOrder = new Order
@@ -265,6 +261,7 @@ namespace STORE_VIDEO_APP
         {
             try
             {
+                MainLogger.Info("CallApiStartOrder");
                 APIResult result = new APIResult();
                 int retryCount = 0;
                 while (true)
@@ -293,7 +290,7 @@ namespace STORE_VIDEO_APP
                     catch (Exception ex)
                     {
                         MainLogger.Error("Lỗi gửi lệnh đăng ký đơn lên server!");
-                        MainLogger.Error($"Error: {ex}");
+                        MainLogger.Error($"CallApiStartOrder Error "+ex);
                     }
                     finally
                     {
@@ -320,12 +317,12 @@ namespace STORE_VIDEO_APP
         {
             try
             {
+                MainLogger.Info($"ProcessEndOrder({scannerCode},{qrData.ToJson()})");
                 if (qrData == null)
                 {
                     return;
                 }
                 MainLogger.Info($"Kết thúc đóng gói hàng {qrData.OrderCode}");
-                MainLogger.Info($"EndOrder({scannerCode},{qrData.ToString()})");
                 int retryAction = 0;
                 while (true)
                 {
@@ -461,7 +458,7 @@ namespace STORE_VIDEO_APP
                         if (!requestEndOrder.IsSuccess)
                         {
                             retryCount++;
-                            MainLogger.Error("Lỗi gửi lệnh kết thúc đơn lên server!");
+                           MainLogger.Error("Lỗi gửi lệnh kết thúc đơn lên server!");
                             await Task.Delay(delayError * 1000);
 
                         }
@@ -475,21 +472,21 @@ namespace STORE_VIDEO_APP
             }
         }
 
-        public QRData GetQRData(string inputCode)
+        public QRData GetQRData(string input)
         {
             try
             {
-                MainLogger.Info($"GetQRData({inputCode})");
-                if (Function.IsValidJson(inputCode))
+                MainLogger.Info($"GetQRData({input})");
+                if (Function.IsValidQRJson(input))
                 {
-                    return JsonConvert.DeserializeObject<QRData>(inputCode);
+                    return JsonConvert.DeserializeObject<QRData>(input);
                 }
                 else
                 {
                     return new QRData()
                     {
                         Command = COMMAND_STARTORDER,
-                        OrderCode = inputCode,
+                        OrderCode = input,
                     };
                 }
             }

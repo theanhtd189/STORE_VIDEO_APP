@@ -7,7 +7,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace VideoServices
 {
@@ -35,27 +34,42 @@ namespace VideoServices
         private static Queue<Session> _queueMain = new Queue<Session>();
 
         /// <summary>
-        /// Danh sách chứa thông tin về camera và service tương ứng với camera đó
-        /// </summary>
-        private static Dictionary<Camera, CameraServices.CameraService> _listCamera = new Dictionary<Camera, CameraServices.CameraService>();
-
-        /// <summary>
         /// Có xóa file sau khi upload thành công không
         /// </summary>
         private bool _isDeleteFileAfterUploaded = AppConfig.GetBooleanValue("IsDeleteFileAfterUploaded");
 
         private bool _isProcessingVideo = false;
+
+        /// <summary>
+        /// Service hỗ trợ lấy video từ API Camera
+        /// </summary>
+        private CameraService _cameraService;
+
         public VideoMainService()
         {
             VideoLogger.Info("Start application - video service");
             InitializeEvent();
+            InitializeCameraService();
             ProcessDataInQueueAsync();
+            //TestCamera();
         }
 
-        async Task StartService()
+        private void InitializeCameraService()
         {
-            await Task.Delay(Timeout.InfiniteTimeSpan).ConfigureAwait(false);
+            try
+            {
+                string cameraHost = AppConfig.GetStringValue("CameraAdminHost");
+                int cameraPort = AppConfig.GetIntValue("CameraAdminPort");
+                _cameraService = new CameraService(cameraHost, cameraPort);
+                _cameraService.LoginSystem();
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error("InitializeCameraService ex");
+                MainLogger.Error(ex);
+            }
         }
+
 
         /// <summary>
         /// Xử lý các job trong hàng đợi
@@ -75,6 +89,18 @@ namespace VideoServices
                             try
                             {
                                 _isProcessingVideo = true;
+                                Camera camera = session.Cameras?.FirstOrDefault();
+                                if (camera != null)
+                                {
+                                    _cameraService.Code = camera.Code;
+                                    _cameraService.CameraChannel = (short)camera.CameraChannel;
+                                }
+                                else
+                                {
+                                    VideoLogger.Warn("ProcessDataInQueueAsync => Camera=NULL");
+                                }
+
+                                //Video model để upload api
                                 Video videoUpload = new Video
                                 {
                                     Code = $"vid_{order.OrderCode}",
@@ -82,12 +108,13 @@ namespace VideoServices
                                     OrderId = order.OrderId,
                                     StartTime = order.StartTime,
                                     EndTime = order.EndTime,
-                                    CameraCode = session.Cameras?.FirstOrDefault().Code,
+                                    CameraCode = camera.Code,
                                     ListCamera = session.Cameras,
                                     VideoPaths = new List<string>(),
                                 };
 
-                                AddSourceToVideoModel(videoUpload, session.Cameras);
+                                var videoPaths = _cameraService.GetResizedVideoPath(order.StartTime, order.EndTime);
+                                videoUpload.VideoPaths.AddRange(videoPaths);
 
 
                                 //Call API upload
@@ -151,72 +178,66 @@ namespace VideoServices
         /// </summary>
         /// <param name="video"></param>
         /// <param name="listCamera"></param>
-        void AddSourceToVideoModel(Video video, List<Camera> listCamera)
-        {
-            try
-            {
-                foreach (Camera camera in listCamera)
-                {
-                    CameraServices.CameraService currentCameraService = null;
-                    var searchCamera = _listCamera.SingleOrDefault(x => x.Key.CameraIP == camera.CameraIP && x.Key.CameraChannel == camera.CameraChannel && x.Key.Code == camera.Code);
-                    if (searchCamera.Key != null && searchCamera.Value != null)
-                    {
-                        currentCameraService = searchCamera.Value;
-                    }
-                    else
-                    {
-                        currentCameraService = GetCameraService(camera);
-                        _listCamera.Add(camera, currentCameraService);
-                    }
+        //void AddSourceToVideoModel(Video video, List<Camera> listCamera)
+        //{
+        //    try
+        //    {
+        //        foreach (Camera camera in listCamera)
+        //        {
+        //            CameraServices.CameraService currentCameraService = null;
+        //            var searchCamera = _listCamera.SingleOrDefault(x => x.Key.CameraIP == camera.CameraIP && x.Key.CameraChannel == camera.CameraChannel && x.Key.Code == camera.Code);
+        //            if (searchCamera.Key != null && searchCamera.Value != null)
+        //            {
+        //                currentCameraService = searchCamera.Value;
+        //            }
+        //            else
+        //            {
+        //                currentCameraService = GetCameraService(camera);
+        //                _listCamera.Add(camera, currentCameraService);
+        //            }
 
-                    if (currentCameraService != null)
-                    {
-                        VideoLogger.Info($"Start getting video => OrderCode = {video.OrderCode}");
-                        var paths = currentCameraService.GetResizedVideoPath(video.StartTime, video.EndTime);
-                        video.VideoPaths.AddRange(paths);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                VideoLogger.Error(ex);
-            }
-        }
+        //            if (currentCameraService != null)
+        //            {
+        //                VideoLogger.Info($"Start getting video => OrderCode = {video.OrderCode}");
+        //                var paths = currentCameraService.GetResizedVideoPath(video.StartTime, video.EndTime);
+        //                video.VideoPaths.AddRange(paths);
+        //            }
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        VideoLogger.Error(ex);
+        //    }
+        //}
 
         void TestCamera()
         {
-            DateTime a = DateTime.Now.AddMinutes(-2).AddSeconds(-20);
-            DateTime b = DateTime.Now.AddMinutes(-2).AddSeconds(-1);
-            var cam = new CameraServices.CameraService()
-            {
-                CameraPort = 8000,
-                CameraIP = "192.168.1.168",
-                CameraChannel = 45
-            };
-
-            var result = cam.GetResizedVideoPath(a, b);
+            DateTime a = DateTime.Now.AddMinutes(-2).AddSeconds(-10);
+            DateTime b = DateTime.Now.AddMinutes(-2).AddSeconds(-1);         
+            var result = _cameraService.GetResizedVideoPath(a,b);
+            Console.WriteLine(result[0]);
         }
 
         /// <summary>
         /// Service hỗ trợ lấy video từ API Camera
         /// </summary>
-        public CameraServices.CameraService GetCameraService(Camera camera)
-        {
-            try
-            {
-                return new CameraServices.CameraService()
-                {
-                    Code = camera.Code,
-                    CameraIP = camera.CameraIP,
-                    CameraPort = (short)camera.CameraPort,
-                    CameraChannel = (short)camera.CameraChannel,
-                };
-            }
-            catch (Exception ex)
-            {
-                VideoLogger.Error($"Camera Service: {ex.Message}");
-                return null;
-            }
-        }
+        //public CameraServices.CameraService GetCameraService(Camera camera)
+        //{
+        //    try
+        //    {
+        //        return new CameraServices.CameraService()
+        //        {
+        //            Code = camera.Code,
+        //            CameraIP = camera.CameraIP,
+        //            CameraPort = (short)camera.CameraPort,
+        //            CameraChannel = (short)camera.CameraChannel,
+        //        };
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        VideoLogger.Error($"Camera Service: {ex.Message}");
+        //        return null;
+        //    }
+        //}
     }
 }

@@ -10,14 +10,14 @@
 
 		<!-- APP SERVICE -->
 		<!--Số giây (s) delay để thực hiện lại hành động khi chương trình bị lỗi-->
-		<add key="DelayError" value="60" />
+		<add key="DelayError" value="10" />
 		<!--Test enviroment-->
 		<add key="EnableTest" value="0" />
 		<!-- END APP SERVICE -->
 		
 		<!-- VIDEO SERVICE -->
 		<!--Tên pipe service-->
-		<add key="ServerPipeName" value="Pipe_StoVid_VideoServices" />
+		<add key="ServerPipeName" value="Pipe_StoVid" />
 		<!--Số giây (s) delay mỗi khi thực hiện chạy 1 job upload video-->
 		<add key="DelayJobTime" value="10" />
 		<!--Số giây (s) delay để thực hiện lại job khi job đó bị lỗi -->
@@ -25,7 +25,6 @@
 		<!--Có xóa file sau khi upload lên API thành công không-->
 		<add key="IsDeleteFileAfterUploaded" value="0" />		
 		<!-- END VIDEO SERVICE -->
-
 
 		<!-- SCANNER SERVICE -->
 		<!--Mã PID của máy quét-->
@@ -39,6 +38,8 @@
 		<add key="RetryLoginCount" value="3" />
 		<!--Số giây (s) delay để thực hiện lại 1 hành động khi bị lỗi-->
 		<add key="CameraDelayError" value="60" />
+		<add key="CameraAdminHost" value="rezkin.ddns.net" />
+		<add key="CameraAdminPort" value="8000" />
 		<add key="CameraAdminUsername" value="admin" />
 		<add key="CameraAdminPassword" value="Vanquang598" />
 		<add key="StoreVideoPath" value="D:\\StoreVideo" />
@@ -48,7 +49,7 @@
 		<!-- END CAMERA SERVICE -->
 		
 		<!-- API SERVICE -->
-		<add key="APIHostName" value="https://vidsto-api.uro-solution.info/" />
+		<add key="APIHostName" value="http://rezkin.ddns.net/" />
 		<add key="APIAdminUsername" value="Admin@gmail.com" />
 		<add key="APIAdminPassword" value="P@ssw0rd" />
 		<!-- END API SERVICE -->

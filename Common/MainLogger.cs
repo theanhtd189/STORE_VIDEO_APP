@@ -4,7 +4,6 @@ using System.Diagnostics;
 
 namespace Common
 {
-
     public static class MainLogger
     {
         private static ILogger _instance;

@@ -27,11 +27,11 @@ namespace ApiServices
         private static readonly string _hostName = AppConfig.GetStringValue("APIHostName");
         private static readonly string _mediaType = "application/json-patch+json";
         private static HttpClient _httpClient;
-        
+
         static APIService()
         {
             _httpClient = new HttpClient();
-            
+
         }
         static async Task<APIResult> PostRequest(string endPoint, object requestObject)
         {
@@ -143,7 +143,7 @@ namespace ApiServices
                 string successMsg = $"MaNV = {userId} đăng ký làm tại bàn deskId={deskId} thành công!";
                 failMsg = $"MaNV = {userId} đăng ký làm tại bàn deskId={deskId} thất bại!";
 
-                var requestObject = new 
+                var requestObject = new
                 {
                     ScannerCode = scannerCode,
                     UserId = userId,
@@ -166,7 +166,7 @@ namespace ApiServices
                 result.Message = ex.Message;
             }
             return result;
-        }             
+        }
         public static async Task<APIResult> CreateOrder(string orderCode, int deskId)
         {
             APIResult result = new APIResult();
@@ -184,14 +184,27 @@ namespace ApiServices
                     DeskId = deskId
                 };
                 result = await PostRequest(endPoint, requestObject);
+                if (result.ReturnData.ToLower().Contains("số thứ tự này đã tồn tại"))
+                {
+                    MainLogger.Warn(result.ReturnData);
+                    result.IsSuccess = true;
+                }
+
                 if (result.IsSuccess)
                 {
                     result.Message = (successMsg);
                     var responseBody = result.ReturnData;
-                    var data = JsonConvert.DeserializeObject<dynamic>(responseBody);
-                    if (data != null)
+                    try
                     {
-                        result.ReturnData = data?.content?.id?.ToString();
+                        var data = JsonConvert.DeserializeObject<dynamic>(responseBody);
+                        if (data != null)
+                        {
+                            result.ReturnData = data?.content?.id?.ToString();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MainLogger.Error(ex);
                     }
                 }
                 else
@@ -251,7 +264,7 @@ namespace ApiServices
             try
             {
                 var client = new HttpClient();
-                var request = new HttpRequestMessage(HttpMethod.Post, "https://vidsto-api.uro-solution.info/api/cms/Video/Upload");
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{_hostName}api/cms/Video/Upload");
                 var multipartContent = new MultipartFormDataContent();
 
                 foreach (var videoPath in videoUpload.VideoPaths)

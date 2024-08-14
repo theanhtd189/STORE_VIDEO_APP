@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO.Ports;
 using System.Linq;
 using System.Management;
@@ -12,11 +11,11 @@ namespace STORE_VIDEO_APP
 {
     public partial class AppMainService
     {
-        private ConcurrentDictionary<string, StringBuilder> _dataBuffers;
-        private ConcurrentDictionary<string, SerialPort> _serialDevices;
+        private ConcurrentDictionary<string, StringBuilder> _dataBuffers = new ConcurrentDictionary<string, StringBuilder>();
+        private ConcurrentDictionary<string, SerialPort> _serialDevices = new ConcurrentDictionary<string, SerialPort>();
         private readonly string _pid = AppConfig.GetStringValue("ProductID");
         private readonly string _vid = AppConfig.GetStringValue("VendorID");
-        private ManagementEventWatcher _watcher;
+        private static HashSet<string> _previousDeviceIds = new HashSet<string>();
         private List<string> ListCOMPorts
         {
             get
@@ -36,9 +35,20 @@ namespace STORE_VIDEO_APP
         {
             try
             {
-                ComPortMonitor();
-                _serialDevices = new ConcurrentDictionary<string, SerialPort>();
-                _dataBuffers = new ConcurrentDictionary<string, StringBuilder>();
+                InitializeScanner();
+                InitializeScannerEvents();
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error("InitializeScannerService ex");
+                MainLogger.Error(ex);
+            }
+        }
+
+        private void InitializeScanner()
+        {
+            try
+            {
                 foreach (var port in ListCOMPorts)
                 {
                     InitializeSerialPort(port, 9600);
@@ -50,10 +60,11 @@ namespace STORE_VIDEO_APP
             }
             catch (Exception ex)
             {
-                MainLogger.Error("InitializeScannerService ex");
+                MainLogger.Error("InitializeScanner ex");
                 MainLogger.Error(ex);
             }
         }
+
         private void InitializeSerialPort(string portName, int baudRate)
         {
             try
@@ -102,13 +113,7 @@ namespace STORE_VIDEO_APP
                 {
                     var line = dataString.Substring(0, newLineIndex);
                     dataString = dataString.Substring(newLineIndex + 1); // Bỏ qua ký tự '\r'
-
                     string idMachine = GetIDFromPort(portName);
-
-                    MainLogger.Info($"\n------------------------------");
-                    MainLogger.Info($"ID máy quét: {idMachine}");
-                    MainLogger.Info($"Dữ liệu đọc được: {line}");
-
                     if (!string.IsNullOrEmpty(idMachine))
                     {
                         ProcessCode(idMachine, line);
@@ -165,7 +170,6 @@ namespace STORE_VIDEO_APP
         {
             var serialPort = (SerialPort)sender;
             var portName = serialPort.PortName;
-
             try
             {
                 lock (_dataBuffers[portName])
@@ -185,17 +189,22 @@ namespace STORE_VIDEO_APP
                 MainLogger.Error(ex);
             }
         }
-        void ComPortMonitor()
+        void InitializeScannerEvents()
         {
             try
             {
-                // Set up the WMI query for detecting new serial ports
-                string query = "SELECT * FROM __InstanceCreationEvent WITHIN 1 WHERE TargetInstance ISA 'Win32_SerialPort'";
-                WqlEventQuery creationQuery = new WqlEventQuery(query);
+                // Lắng nghe sự kiện khi có thiết bị kết nối
+                ManagementEventWatcher connectWatcher = new ManagementEventWatcher();
+                connectWatcher.EventArrived += new EventArrivedEventHandler(DeviceConnected);
+                connectWatcher.Query = new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent WHERE EventType = 2");
+                connectWatcher.Start();
 
-                _watcher = new ManagementEventWatcher(creationQuery);
-                _watcher.EventArrived += new EventArrivedEventHandler(OnPortAdded);
-                _watcher.Start();
+                // Lắng nghe sự kiện khi thiết bị bị ngắt kết nối
+                ManagementEventWatcher disconnectWatcher = new ManagementEventWatcher();
+                disconnectWatcher.EventArrived += new EventArrivedEventHandler(DeviceDisconnected);
+                disconnectWatcher.Query = new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent WHERE EventType = 3");
+                disconnectWatcher.Start();
+
             }
             catch (Exception ex)
             {
@@ -204,24 +213,16 @@ namespace STORE_VIDEO_APP
             }
         }
 
-        private void OnPortAdded(object sender, EventArrivedEventArgs e)
+        private void DeviceConnected(object sender, EventArrivedEventArgs e)
         {
-            try
-            {
-                ManagementBaseObject targetInstance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
-                string portName = targetInstance["DeviceID"].ToString();
-                Console.WriteLine($"Serial port added: {portName}");
-            }
-            catch (Exception ex)
-            {
-                MainLogger.Error("OnPortAdded ex");
-                MainLogger.Error(ex);
-            }
+            MainLogger.Info("A device has been connected.");
+            InitializeScanner();
         }
 
-        public void Stop()
+        private void DeviceDisconnected(object sender, EventArrivedEventArgs e)
         {
-            _watcher.Stop();
+            MainLogger.Info("A device has been disconnected.");
+            //InitializeScanner();
         }
     }
 }

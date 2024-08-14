@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Common.Model;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -28,20 +29,31 @@ namespace Common
             }
         }
 
-        public static bool IsValidJson(string jsonString)
+        public static bool IsValidQRJson(string jsonString)
         {
             try
             {
-                var obj = JsonConvert.DeserializeObject<object>(jsonString);
+                var obj = JsonConvert.DeserializeObject<QRData>(jsonString);
                 return true;
             }
             catch (JsonReaderException)
             {
                 return false;
             }
-            catch (Exception) // if some other exception occurs
+            catch (Exception) 
             {
                 return false;
+            }
+        }
+        public static string ToJson(this object obj)
+        {
+            try
+            {
+                return JsonConvert.SerializeObject(obj, Formatting.Indented);
+            }
+            catch (Exception)
+            {
+                return "";
             }
         }
     }

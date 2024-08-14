@@ -49,8 +49,10 @@ namespace CameraServices
         private readonly string _videoOutputExtension = AppConfig.GetStringValue("VideoOutputExtension");
         private readonly string _videoResizeOutputExtension = AppConfig.GetStringValue("VideoResizeOutputExtension");
 
-        public CameraService()
+        public CameraService(string host, int port)
         {
+            CameraIP = host;
+            CameraPort = (short)port;
             VideoPaths = new List<string>();
             InitConfig();
         }
@@ -69,6 +71,14 @@ namespace CameraServices
                 iChannelNum = new int[96];
             }
         }
+
+        public void LoginSystem()
+        {
+            while (!_isLoginSuccess)
+            {
+                _isLoginSuccess = Login();
+            }
+        } 
         private bool Login()
         {
             if (_lUserID < 0)
@@ -88,12 +98,12 @@ namespace CameraServices
                             iLastErr = CHCNetSDK.NET_DVR_GetLastError();
                             _str1 = "NET_DVR_Login_V30 failed, error code= " + iLastErr; //Login failed,print error code
                             MainLogger.Error(_str1);
-                            MainLogger.Error($"CameraCode={_code} | {_ip}:{_port} channel {_channel} ==> Login Failed!");
+                            MainLogger.Error($"Camera {_ip}:{_port} ==> Login Failed!");
                             return false;
                         }
                         else
                         {
-                            MainLogger.Info($"CameraCode={_code} | {_ip}:{_port} channel {_channel} ==> Login Succesfully!");
+                            MainLogger.Info($"Camera {_ip}:{_port} ==> Login Succesfully!");
                             dwAChanTotalNum = (uint)DeviceInfo.byChanNum;
                             dwDChanTotalNum = (uint)DeviceInfo.byIPChanNum + 256 * (uint)DeviceInfo.byHighDChanNum;
 
@@ -320,12 +330,6 @@ namespace CameraServices
             isVideoCorrupted = false;
             try
             {
-                InitConfig();
-
-                while (!_isLoginSuccess)
-                {
-                    _isLoginSuccess = Login();
-                }
                 if (_lDownHandle >= 0)
                 {
                     MainLogger.Info("Downloading, please stop firstly!");//Please stop downloading
@@ -360,7 +364,7 @@ namespace CameraServices
                     Directory.CreateDirectory(videoFolderPath);
                     MainLogger.Info($"Created path: {videoFolderPath}");
                 }
-                string sVideoFileName = "D:\\Downtest_Channel" + struDownPara.dwChannel + ".mp4";
+
                 //Download by time
                 _lDownHandle = CHCNetSDK.NET_DVR_GetFileByTime_V40(_lUserID, fullFilePath, ref struDownPara);
                 if (_lDownHandle < 0)
@@ -413,7 +417,7 @@ namespace CameraServices
                     else
                     {
                         MainLogger.Error($"Render failed. Retry...");
-                        Thread.Sleep(5000);
+                        //Thread.Sleep(5000);
                     }
                 }
             }

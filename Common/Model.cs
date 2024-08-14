@@ -171,17 +171,7 @@ namespace Common.Model
         public string Command { get; set; }
         public List<Camera> Cameras { get; set; }
         public string OrderCode { get; set; }
-        public override string ToString()
-        {
-            try
-            {
-                return JsonConvert.SerializeObject(this, Formatting.Indented);
-            }
-            catch (Exception)
-            {
-                return "";
-            }
-        }
+
     }
 
     [Serializable]
