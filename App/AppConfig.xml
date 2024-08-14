@@ -1,0 +1,57 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+	<appSettings>
+		<!-- LOG SERVICE -->
+		<!--Tên folder chứa file log-->
+		<add key="LogFolderName" value="Logs" />		
+		<!--Định dạng của file log-->
+		<add key="LogExtension" value="txt" />
+		<!-- END LOG SERVICE -->
+
+		<!-- APP SERVICE -->
+		<!--Số giây (s) delay để thực hiện lại hành động khi chương trình bị lỗi-->
+		<add key="DelayError" value="10" />
+		<!--Test enviroment-->
+		<add key="EnableTest" value="0" />
+		<!-- END APP SERVICE -->
+		
+		<!-- VIDEO SERVICE -->
+		<!--Tên pipe service-->
+		<add key="ServerPipeName" value="Pipe_StoVid" />
+		<!--Số giây (s) delay mỗi khi thực hiện chạy 1 job upload video-->
+		<add key="DelayJobTime" value="10" />
+		<!--Số giây (s) delay để thực hiện lại job khi job đó bị lỗi -->
+		<add key="DelayErrorJobTime" value="30" />
+		<!--Có xóa file sau khi upload lên API thành công không-->
+		<add key="IsDeleteFileAfterUploaded" value="0" />		
+		<!-- END VIDEO SERVICE -->
+
+		<!-- SCANNER SERVICE -->
+		<!--Mã PID của máy quét-->
+		<add key="ProductID" value="5523" />
+		<!--Mã VID của máy quét-->
+		<add key="VendorID" value="1A86" />
+		<!-- END SCANNER SERVICE -->
+		
+		<!-- CAMERA SERVICE -->
+		<!--Số lần thực hiện login lại khi bị lỗi-->
+		<add key="RetryLoginCount" value="3" />
+		<!--Số giây (s) delay để thực hiện lại 1 hành động khi bị lỗi-->
+		<add key="CameraDelayError" value="60" />
+		<add key="CameraAdminHost" value="rezkin.ddns.net" />
+		<add key="CameraAdminPort" value="8000" />
+		<add key="CameraAdminUsername" value="admin" />
+		<add key="CameraAdminPassword" value="Vanquang598" />
+		<add key="StoreVideoPath" value="D:\\StoreVideo" />
+		<add key="VideoOutputExtension" value=".mp4" />
+		<!-- Format tên cho video sau khi đã được giảm chất lượng -->
+		<add key="VideoResizeOutputExtension" value="_resized.mp4" />
+		<!-- END CAMERA SERVICE -->
+		
+		<!-- API SERVICE -->
+		<add key="APIHostName" value="http://rezkin.ddns.net/" />
+		<add key="APIAdminUsername" value="Admin@gmail.com" />
+		<add key="APIAdminPassword" value="P@ssw0rd" />
+		<!-- END API SERVICE -->
+	</appSettings>
+</configuration>

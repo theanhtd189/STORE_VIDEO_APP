@@ -1,0 +1,7 @@
+<service>
+  <id>StoreVideo-VideoService</id>
+  <name>[Upload Video] Store Video</name>
+  <description></description>
+  <startmode>Automatic</startmode>
+  <executable>%BASE%/VideoServices.exe</executable>
+</service>

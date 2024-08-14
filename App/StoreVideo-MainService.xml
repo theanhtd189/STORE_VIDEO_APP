@@ -1,0 +1,6 @@
+<service>
+  <id>StoreVideo-MainService</id>
+  <name>[Main] Store Video</name>
+  <description></description>
+  <executable>%BASE%/STORE_VIDEO_APP.exe</executable>
+</service>
