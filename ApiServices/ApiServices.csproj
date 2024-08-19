@@ -67,10 +67,6 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\CameraServices\CameraServices.csproj">
-      <Project>{b4fb17b8-78ce-4709-b788-d30526aea330}</Project>
-      <Name>CameraServices</Name>
-    </ProjectReference>
     <ProjectReference Include="..\Common\Common.csproj">
       <Project>{fbc0415a-32a5-454c-a6f9-18d7a0ee0f02}</Project>
       <Name>Common</Name>

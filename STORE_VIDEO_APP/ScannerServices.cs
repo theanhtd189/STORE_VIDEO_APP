@@ -1,4 +1,5 @@
 ﻿using Common;
+using Common.Model;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -12,9 +13,11 @@ namespace STORE_VIDEO_APP
     public partial class AppMainService
     {
         private ConcurrentDictionary<string, StringBuilder> _dataBuffers = new ConcurrentDictionary<string, StringBuilder>();
-        private ConcurrentDictionary<string, SerialPort> _serialDevices = new ConcurrentDictionary<string, SerialPort>();
-        private readonly string _pid = AppConfig.GetStringValue("ProductID");
-        private readonly string _vid = AppConfig.GetStringValue("VendorID");
+        private ConcurrentDictionary<KeyValuePair<string, SerialPort>, StringBuilder> _serialDevices = new ConcurrentDictionary<KeyValuePair<string, SerialPort>, StringBuilder>();
+        private static string PID => $"PID_{AppConfig.GetStringValue("ProductID")}";
+        private static string VID => $"VID_{AppConfig.GetStringValue("VendorID")}";
+
+        static readonly string _serialProductKey = $"{VID}&{PID}";
         private List<string> ListCOMPorts
         {
             get
@@ -50,11 +53,11 @@ namespace STORE_VIDEO_APP
             {
                 foreach (var port in ListCOMPorts)
                 {
-                    InitializeSerialPort(port, 9600);
+                    InitializeSerialPort(port);
                 }
                 if (_serialDevices.Count == 0)
                 {
-                    MainLogger.Warn("Chưa có máy quét nào được kết nối");
+                    MainLogger.Warn("Not found any scanners");
                 }
             }
             catch (Exception ex)
@@ -64,48 +67,86 @@ namespace STORE_VIDEO_APP
             }
         }
 
-        private void InitializeSerialPort(string portName, int baudRate)
+        private void InitializeSerialPort(string portName)
         {
             try
             {
-                if(_dataBuffers.TryGetValue(portName, out var data))
+                string deviceID = GetIDFromPort(portName);
+                //var check = _scannerList.FirstOrDefault(x => x.SerialPort.PortName == portName && x.ScannerCode == deviceID);
+                //if (check != null)
+                //{
+                //    MainLogger.Warn($"Connected {portName} does exist before!");
+                //    return;
+                //}
+                if (_serialDevices.Keys.Any(x=>x.Key.Contains(portName)))
                 {
-                    MainLogger.Warn($"Đã kết nối cổng{portName} trước đó!");
+                    MainLogger.Warn($"Connected {portName} does exist before!");
                     return;
                 }
 
-                string deviceID = GetIDFromPort(portName);
-                string serialProductKey = $"VID_{_vid}&PID_{_pid}";
-
+                
                 //Kiểm tra xem thiết bị đang kết nối với cổng COM có phải máy quét không
-                if (deviceID.Contains(serialProductKey))
+                if (deviceID.Contains(_serialProductKey))
                 {
-                    var serialPort = new SerialPort(portName, baudRate)
-                    {
-                        Encoding = Encoding.ASCII
-                    };
+                    var serialPort = GetSerialPortByPortName(portName);
                     serialPort.DataReceived += DataReceivedHandler;
                     serialPort.Open();
 
-                    if (!_serialDevices.TryAdd(portName, serialPort))
+                    if (!_serialDevices.TryAdd(new KeyValuePair<string, SerialPort>(deviceID, serialPort), new StringBuilder()))
                     {
-                        MainLogger.Info($"Lỗi kết nối máy quét {deviceID} cổng {portName}.");
+                        MainLogger.Error($"Error connect to scanner {deviceID} port {portName}");
                     }
                     _dataBuffers.TryAdd(portName, new StringBuilder());
-                    MainLogger.Info($"Đã kết nối máy quét {deviceID} cổng {portName}.");
+                    MainLogger.Info($"Connected to scanner {deviceID} port {portName}.");
                 }
                 else
                 {
                     //CommonFunction.WriteLog($"Day khong phai may quet!");
                 }
-
             }
             catch (Exception ex)
             {
                 MainLogger.Error($"InitializeSerialPort {portName}.");
                 MainLogger.Error(ex);
+                try
+                {
+                    new SerialPort(portName, 9600).Close();
+                }
+                catch (Exception e)
+                {
+
+                    MainLogger.Error($"Close error =>{e}");
+                }
             }
         }
+
+        SerialPort GetSerialPortByPortName(string portName)
+        {
+            // Kiểm tra xem cổng COM có tồn tại không
+            string[] availablePorts = SerialPort.GetPortNames();
+
+            if (Array.Exists(availablePorts, port => port.Equals(portName, StringComparison.OrdinalIgnoreCase)))
+            {
+                // Tạo và cấu hình đối tượng SerialPort
+                SerialPort serialPort = new SerialPort(portName)
+                {
+                    BaudRate = 9600, // Cấu hình tốc độ Baud theo nhu cầu của bạn
+                    Parity = Parity.None,
+                    DataBits = 8,
+                    StopBits = StopBits.One,
+                    Handshake = Handshake.None,
+                    ReadTimeout = 500,
+                    WriteTimeout = 500
+                };
+                return serialPort;
+            }
+
+            return new SerialPort(portName, 9600)
+            {
+                Encoding = Encoding.ASCII
+            }; ;
+        }
+
         private void ProcessBuffer(string portName)
         {
             try
@@ -173,19 +214,23 @@ namespace STORE_VIDEO_APP
         }
         private void DataReceivedHandler(object sender, SerialDataReceivedEventArgs e)
         {
-            var serialPort = (SerialPort)sender;
-            var portName = serialPort.PortName;
+            SerialPort serialPort = (SerialPort)sender;
+            string portName = serialPort.PortName;
             try
             {
-                lock (_dataBuffers[portName])
+                StringBuilder dataReader = _dataBuffers[portName];
+                if(dataReader != null)
                 {
-                    var buffer = new byte[serialPort.BytesToRead];
-                    serialPort.Read(buffer, 0, buffer.Length);
-                    var dataInput = Encoding.ASCII.GetString(buffer);
-                    _dataBuffers[portName].Append(dataInput);
+                    //lock (dataReader)
+                    {
+                        var buffer = new byte[serialPort.BytesToRead];
+                        serialPort.Read(buffer, 0, buffer.Length);
+                        var dataInput = Encoding.ASCII.GetString(buffer);
+                        dataReader.Append(dataInput);
 
-                    // Xử lý dữ liệu trong buffer
-                    ProcessBuffer(portName);
+                        // Xử lý dữ liệu trong buffer
+                        ProcessBuffer(portName);
+                    }
                 }
             }
             catch (Exception ex)
@@ -198,17 +243,23 @@ namespace STORE_VIDEO_APP
         {
             try
             {
-                // Lắng nghe sự kiện khi có thiết bị kết nối
-                ManagementEventWatcher connectWatcher = new ManagementEventWatcher();
-                connectWatcher.EventArrived += new EventArrivedEventHandler(DeviceConnected);
-                connectWatcher.Query = new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent WHERE EventType = 2");
-                connectWatcher.Start();
+                // Lắng nghe sự kiện khi thiết bị được kết nối hoặc ngắt kết nối qua COM port
+                WqlEventQuery creationQuery = new WqlEventQuery("SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_PnPEntity'");
+                WqlEventQuery deletionQuery = new WqlEventQuery("SELECT * FROM __InstanceDeletionEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_PnPEntity'");
 
-                // Lắng nghe sự kiện khi thiết bị bị ngắt kết nối
-                ManagementEventWatcher disconnectWatcher = new ManagementEventWatcher();
-                disconnectWatcher.EventArrived += new EventArrivedEventHandler(DeviceDisconnected);
-                disconnectWatcher.Query = new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent WHERE EventType = 3");
-                disconnectWatcher.Start();
+                ManagementEventWatcher creationWatcher = new ManagementEventWatcher(creationQuery);
+                ManagementEventWatcher deletionWatcher = new ManagementEventWatcher(deletionQuery);
+
+                creationWatcher.EventArrived += new EventArrivedEventHandler(DeviceConnectedEvent);
+                deletionWatcher.EventArrived += new EventArrivedEventHandler(DeviceDisconnectedEvent);
+
+                creationWatcher.Start();
+                deletionWatcher.Start();
+
+                //WqlEventQuery query = new WqlEventQuery("SELECT * FROM Win32_DeviceChangeEvent");
+                //ManagementEventWatcher watcher = new ManagementEventWatcher(query);
+                //watcher.EventArrived += new EventArrivedEventHandler(DeviceChangedEvent);
+                //watcher.Start();
 
             }
             catch (Exception ex)
@@ -217,17 +268,109 @@ namespace STORE_VIDEO_APP
                 MainLogger.Error(ex);
             }
         }
-
-        private void DeviceConnected(object sender, EventArrivedEventArgs e)
+        void DeviceChangedEvent(object sender, EventArrivedEventArgs e)
         {
-            MainLogger.Info("A device has been connected.");
-            InitializeScanner();
+            string eventType = e.NewEvent.ClassPath.ClassName;
+
+            // Truy vấn thiết bị để lọc theo loại và PID/VID
+            ManagementObjectSearcher searcher = new ManagementObjectSearcher("SELECT * FROM Win32_PnPEntity");
+            foreach (ManagementObject device in searcher.Get())
+            {
+                string deviceID = device["DeviceID"]?.ToString() ?? "";
+                string pnpClass = device["PNPClass"]?.ToString() ?? "";
+                string classGuid = device["ClassGuid"]?.ToString() ?? "";
+
+                // Kiểm tra thiết bị có PID/VID đúng và thuộc loại "Port (COM & LPT)"
+                if (deviceID.Contains(VID) && deviceID.Contains(PID) && pnpClass == "Ports")
+                {
+                    Console.WriteLine($"Device of type 'Port (COM & LPT)' with specified PID/VID detected.");
+                    Console.WriteLine("Device ID: " + deviceID);
+
+                    InitializeScanner();
+                    break; // Thoát khỏi vòng lặp sau khi xử lý thiết bị đầu tiên
+                }
+            }
         }
 
-        private void DeviceDisconnected(object sender, EventArrivedEventArgs e)
+        private void DeviceConnectedEvent(object sender, EventArrivedEventArgs e)
         {
-            MainLogger.Info("A device has been disconnected.");
-            //InitializeScanner();
+            try
+            {
+                ManagementBaseObject instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
+                string caption = instance["Caption"]?.ToString();
+
+                if (caption.Contains("COM"))
+                {
+                    string deviceID = instance["DeviceID"]?.ToString();
+                    string port = GetPortName(deviceID);
+                    MainLogger.Warn($"Device connected: {caption}, DeviceID: {deviceID} Port {port}");
+
+                    InitializeSerialPort(port);
+                }
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error("DeviceConnectedEvent ex");
+                MainLogger.Error(ex);
+            }
+        }
+
+        private void DeviceDisconnectedEvent(object sender, EventArrivedEventArgs e)
+        {
+            try
+            {
+                ManagementBaseObject instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
+                string caption = instance["Caption"]?.ToString();
+
+                if (caption.Contains("COM"))
+                {
+                    string deviceID = instance["DeviceID"]?.ToString();
+                    var serialPort = _serialDevices.Keys.FirstOrDefault(x => x.Key == deviceID);
+                    if (serialPort.Value != null)
+                    {
+                        serialPort.Value.Close();
+                        _serialDevices.TryRemove(serialPort, out var removedPort);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error("DeviceDisconnectedEvent ex");
+                MainLogger.Error(ex);
+            }
+        }
+
+        private string GetPortName(string deviceID)
+        {
+            try
+            {
+                // Truy vấn Win32_PnPEntity dựa trên DeviceID
+                string query = $"SELECT * FROM Win32_PnPEntity WHERE DeviceID = '{deviceID.Replace("\\", "\\\\")}'";
+                using (ManagementObjectSearcher searcher = new ManagementObjectSearcher(query))
+                {
+                    foreach (ManagementObject obj in searcher.Get())
+                    {
+                        // Kiểm tra nếu tên cổng COM có trong chuỗi Caption
+                        string caption = obj["Caption"]?.ToString();
+                        if (!string.IsNullOrEmpty(caption) && caption.Contains("(COM"))
+                        {
+                            // Tách tên cổng COM từ Caption (ví dụ: "USB Serial Port (COM3)")
+                            int startIndex = caption.IndexOf("(COM") + 1;
+                            int endIndex = caption.IndexOf(")", startIndex);
+                            if (startIndex > 0 && endIndex > 0)
+                            {
+                                return caption.Substring(startIndex, endIndex - startIndex);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error("GetPortName ex");
+                MainLogger.Error(ex);
+            }
+            return null;
         }
     }
 }

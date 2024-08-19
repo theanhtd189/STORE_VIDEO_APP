@@ -108,10 +108,6 @@
       <Project>{fbc0415a-32a5-454c-a6f9-18d7a0ee0f02}</Project>
       <Name>Common</Name>
     </ProjectReference>
-    <ProjectReference Include="..\VideoServices\VideoServices.csproj">
-      <Project>{4e040985-a928-4273-9b3f-47b29d53ee82}</Project>
-      <Name>VideoServices</Name>
-    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">

@@ -1,4 +1,6 @@
 ﻿using Common;
+using MediaToolkit.Model;
+using MediaToolkit;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -78,7 +80,7 @@ namespace CameraServices
             {
                 _isLoginSuccess = Login();
             }
-        } 
+        }
         private bool Login()
         {
             if (_lUserID < 0)
@@ -239,13 +241,13 @@ namespace CameraServices
                 ffmpeg.StartInfo.Arguments = $"{arguments}";
                 ffmpeg.StartInfo.UseShellExecute = false;
                 //ffmpeg.StartInfo.RedirectStandardOutput = true;
-                ffmpeg.StartInfo.RedirectStandardError = true;
-                //ffmpeg.StartInfo.CreateNoWindow = false;
+                //ffmpeg.StartInfo.RedirectStandardError = true;
+                ffmpeg.StartInfo.CreateNoWindow = false;
                 ffmpeg.Start();
                 //string output = ffmpeg.StandardOutput.ReadToEnd();
-                string error = ffmpeg.StandardError.ReadToEnd();
+                //string error = ffmpeg.StandardError.ReadToEnd();
                 ffmpeg.WaitForExit();
-                duration = ParseDuration(error);
+                //duration = ParseDuration(error);
             }
             catch (Exception ex)
             {
@@ -277,24 +279,26 @@ namespace CameraServices
                         sizeFile = new FileInfo(originalVideoPath).Length;
                         if (sizeFile > 0)
                         {
-                            string outputFilePath = originalVideoPath.Replace(_videoOutputExtension, _videoResizeOutputExtension);
-                            string cmd = string.Format("-i \"{0}\" -vcodec libx265 -crf 28 \"{1}\"", originalVideoPath, outputFilePath);
-                            try
-                            {
-                                VideoLogger.Info($"Start resizing file ...");
-                                ExecuteFFmpegCommand(cmd, out string duration);
-                                if (File.Exists(outputFilePath) && new FileInfo(outputFilePath).Length > 0)
-                                {
-                                    VideoLogger.Info($"Resized file {outputFilePath} successfully");
-                                    VideoPaths.Add(outputFilePath);
-                                    break;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                VideoLogger.Error(ex);
-                                Thread.Sleep(5000);
-                            }
+                            VideoPaths.Add(originalVideoPath);
+
+                            //string outputFilePath = originalVideoPath.Replace(_videoOutputExtension, _videoResizeOutputExtension);
+                            //string cmd = string.Format("-y -i \"{0}\" -vcodec libx265 -crf 28 \"{1}\"", originalVideoPath, outputFilePath);
+                            //try
+                            //{
+                            //    VideoLogger.Info($"Start resizing file ...");
+                            //    ExecuteFFmpegCommand(cmd, out string duration);
+                            //    if (File.Exists(outputFilePath) && new FileInfo(outputFilePath).Length > 0)
+                            //    {
+                            //        VideoLogger.Info($"Resized file {outputFilePath} successfully");
+                            //        VideoPaths.Add(outputFilePath);
+                            //        break;
+                            //    }
+                            //}
+                            //catch (Exception ex)
+                            //{
+                            //    VideoLogger.Error(ex);
+                            //    Thread.Sleep(5000);
+                            //}
                         }
                         else
                         {
@@ -302,7 +306,7 @@ namespace CameraServices
                             Thread.Sleep(5000);
                         }
                     }
-                    //Thread.Sleep(5000);
+                    Thread.Sleep(5000);
                 }
             }
             catch (Exception ex)
@@ -325,12 +329,12 @@ namespace CameraServices
         /// <param name="startTime"></param>
         /// <param name="endTime"></param>
         /// <returns></returns>
-        private string GetOriginalVideoPath(DateTime startTime, DateTime endTime, out bool isVideoCorrupted)
+        public string GetOriginalVideoPath(DateTime startTime, DateTime endTime, out bool isVideoCorrupted)
         {
             isVideoCorrupted = false;
             try
             {
-                if (_lDownHandle >= 0)
+                if (_lDownHandle >= 0)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               if (_lDownHandle >= 0)
                 {
                     VideoLogger.Info("Downloading, please stop firstly!");//Please stop downloading
                     return null;
@@ -353,7 +357,7 @@ namespace CameraServices
                 struDownPara.struStopTime.dwDay = (uint)endTime.Day;
                 struDownPara.struStopTime.dwHour = (uint)endTime.Hour;
                 struDownPara.struStopTime.dwMinute = (uint)endTime.Minute;
-                struDownPara.struStopTime.dwSecond = (uint)endTime.Second;
+                struDownPara.struStopTime.dwSecond = (uint)(endTime.AddSeconds(10).Second);
 
                 string videoFileName = $"{startTime:ddMMyyyy-HHmmss}-{endTime:HHmmss-}{struDownPara.dwChannel}{_videoOutputExtension}";
                 string videoFolderPath = Path.Combine(AppConfig.GetStringValue("StoreVideoPath"), Code);
@@ -385,33 +389,36 @@ namespace CameraServices
                     return null;
                 }
 
+                Thread.Sleep(1000);
+
                 if (CheckStreamStatus())
                 {
                     if (File.Exists(fullFilePath) && new FileInfo(fullFilePath).Length > 0)
                     {
-                        TimeSpan expectedDuration = TimeSpan.Parse((endTime - startTime).ToString(@"hh\:mm\:ss"));//Thời lượng video dự kiến nếu render thành công
-                        ExecuteFFmpegCommand($"-i \"{fullFilePath}\"", out string duration);
                         VideoLogger.Info($"Created file => {fullFilePath}");
-                        if (TimeSpan.TryParse(duration, out TimeSpan actualDuration))
+                        TimeSpan expectedDuration = TimeSpan.Parse((endTime - startTime).ToString(@"hh\:mm\:ss"));//Thời lượng video dự kiến nếu render thành công
+                        TimeSpan actualDuration = GetDuration(fullFilePath);
+
+                        //Tính xem thời lượng 2 video chênh lệch nhiều không 
+                        TimeSpan difference = expectedDuration - actualDuration;
+
+                        //Tính xem 50% thời lượng của video gốc là bao nhiêu
+                        TimeSpan fiftyPercentOfA = TimeSpan.FromTicks(expectedDuration.Ticks / 2);
+
+                        if(expectedDuration == actualDuration)
                         {
-                            //Tính xem thời lượng 2 video chênh lệch nhiều không 
-                            TimeSpan difference = expectedDuration - actualDuration;
-
-                            //Tính xem 50% thời lượng của video gốc là bao nhiêu
-                            TimeSpan fiftyPercentOfA = TimeSpan.FromTicks(expectedDuration.Ticks / 2);
-
+                            VideoLogger.Info($"Video duration: {actualDuration}");
+                        } 
+                        else 
+                        if (difference > fiftyPercentOfA)
+                        {
                             //Nếu thời lượng chênh nhau quá 50% thì video render ra đang bị corrupted
-                            if (difference > fiftyPercentOfA)
-                            {
-                                isVideoCorrupted = true;
-                                VideoLogger.Error($"!!! WARNING: Video was corrupted");
-                                VideoLogger.Error($"Expected duration: {expectedDuration} | Actual duration: {duration}");
-                            }
+                            isVideoCorrupted = true;
+                            File.Delete(fullFilePath);
+                            VideoLogger.Warn($"Video was corrupted !!!");
+                            VideoLogger.Warn($"Expected duration: {expectedDuration} | Actual duration: {actualDuration}");
                         }
-                        else
-                        {
-                            VideoLogger.Info($"Video duration: {duration}");
-                        }
+
                         return fullFilePath;
                     }
                     else
@@ -428,6 +435,25 @@ namespace CameraServices
             }
             return null;
         }
+
+        public TimeSpan GetDuration(string filePath)
+        {
+            try
+            {
+                var inputFile = new MediaFile { Filename = filePath };
+                using (var engine = new Engine())
+                {
+                    engine.GetMetadata(inputFile);
+                    return inputFile.Metadata.Duration;
+                }
+            }
+            catch (Exception ex)
+            {
+                VideoLogger.Error(ex);
+                return new TimeSpan(0,0,0,0);
+            }
+        }
+
         private bool CheckStreamStatus()
         {
             while (true)
@@ -450,6 +476,7 @@ namespace CameraServices
                         VideoLogger.Error(_str);
                         return false;
                     }
+                    Thread.Sleep(1000);
                     _lDownHandle = -1;
                     return true;
                 }

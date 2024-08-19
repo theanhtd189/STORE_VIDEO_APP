@@ -91,7 +91,7 @@
     <Compile Include="AppConfig.cs" />
     <Compile Include="Function.cs" />
     <Compile Include="Model.cs" />
-    <Compile Include="MainLogger.cs" />
+    <Compile Include="Logger.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

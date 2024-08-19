@@ -1,6 +1,8 @@
 ﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.IO.Ports;
+using System.Text;
 
 namespace Common.Model
 {
@@ -14,6 +16,10 @@ namespace Common.Model
             get { return _scannerCode; }
             set { _scannerCode = value; }
         }
+
+        public SerialPort SerialPort { get;set; }
+
+        public StringBuilder Data { get;set; }
     }
 
     [Serializable]

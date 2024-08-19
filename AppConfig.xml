@@ -3,7 +3,7 @@
 	<appSettings>
 		<!-- LOG SERVICE -->
 		<!--Tên folder chứa file log-->
-		<add key="LogFolderName" value="Logs" />		
+		<add key="LogFolderName" value="D://StoreVideo/Logs" />		
 		<!--Định dạng của file log-->
 		<add key="LogExtension" value="txt" />
 		<!-- END LOG SERVICE -->
@@ -17,13 +17,15 @@
 		
 		<!-- VIDEO SERVICE -->
 		<!--Tên pipe service-->
-		<add key="ServerPipeName" value="Pipe_StoVid" />
+		<add key="ServerPipeName" value="pipe_storevideo_abc12345" />
 		<!--Số giây (s) delay mỗi khi thực hiện chạy 1 job upload video-->
 		<add key="DelayJobTime" value="10" />
 		<!--Số giây (s) delay để thực hiện lại job khi job đó bị lỗi -->
-		<add key="DelayErrorJobTime" value="30" />
-		<!--Có xóa file sau khi upload lên API thành công không-->
-		<add key="IsDeleteFileAfterUploaded" value="0" />		
+		<add key="DelayErrorJobTime" value="10" />
+		<!--Có xóa file gốc sau khi upload lên API thành công không-->
+		<add key="IsDeleteOriginalFileAfterUploaded" value="0" />				
+		<!--Có xóa file đã nén sau khi upload lên API thành công không-->
+		<add key="IsDeleteResizedFileAfterUploaded" value="0" />		
 		<!-- END VIDEO SERVICE -->
 
 		<!-- SCANNER SERVICE -->
@@ -38,18 +40,21 @@
 		<add key="RetryLoginCount" value="3" />
 		<!--Số giây (s) delay để thực hiện lại 1 hành động khi bị lỗi-->
 		<add key="CameraDelayError" value="60" />
-		<add key="CameraAdminHost" value="rezkin.ddns.net" />
+		<add key="CameraAdminIP" value="192.168.1.168" />
 		<add key="CameraAdminPort" value="8000" />
 		<add key="CameraAdminUsername" value="admin" />
 		<add key="CameraAdminPassword" value="Vanquang598" />
-		<add key="StoreVideoPath" value="D:\\StoreVideo" />
+		<add key="CameraCodeDefault" value="CAMERA_DEFAULT" />
+		<add key="StoreVideoPath" value="D:\StoreVideo" />
 		<add key="VideoOutputExtension" value=".mp4" />
 		<!-- Format tên cho video sau khi đã được giảm chất lượng -->
 		<add key="VideoResizeOutputExtension" value="_resized.mp4" />
 		<!-- END CAMERA SERVICE -->
 		
 		<!-- API SERVICE -->
-		<add key="APIHostName" value="http://rezkin.ddns.net/" />
+		<!--http://rezkin.ddns.net-->
+		<!--https://vidsto-api.uro-solution.info/-->
+		<add key="APIHostName" value="http://192.168.1.39" />
 		<add key="APIAdminUsername" value="Admin@gmail.com" />
 		<add key="APIAdminPassword" value="P@ssw0rd" />
 		<!-- END API SERVICE -->

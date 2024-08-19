@@ -13,6 +13,7 @@ namespace ApiServices
     public class APIResult
     {
         public string Message { get; set; }
+        public string ErrorMessage { get; set; }
         public bool IsSuccess { get; set; }
         public int StatusCode { get; set; }
         public dynamic ReturnData { get; set; }
@@ -22,127 +23,58 @@ namespace ApiServices
     {
         private static string token;
         private static string refreshToken;
+        private static string _hostName = AppConfig.GetStringValue("APIHostName");
         private static readonly string _email = AppConfig.GetStringValue("APIAdminUsername");
         private static readonly string _passWord = AppConfig.GetStringValue("APIAdminPassword");
-        private static readonly string _hostName = AppConfig.GetStringValue("APIHostName");
         private static readonly string _mediaType = "application/json-patch+json";
         private static HttpClient _httpClient;
 
         static APIService()
         {
             _httpClient = new HttpClient();
-
         }
-        static async Task<APIResult> PostRequest(string endPoint, object requestObject)
+
+        public static bool CheckConnection()
         {
-            var result = new APIResult();
             try
             {
-                string apiUrl = $"{_hostName}{endPoint}";
-                var request = new HttpRequestMessage(HttpMethod.Post, apiUrl);
-                string jsonRequest = JsonConvert.SerializeObject(requestObject, Formatting.Indented);
-                var content = new StringContent(jsonRequest, null, _mediaType);
-                request.Content = content;
-                var response = await _httpClient.SendAsync(request);
-                var res = response.Content.ReadAsStringAsync().Result;
-                result.Message = res;
-                result.ReturnData = res;
-                result.IsSuccess = response.IsSuccessStatusCode;
-                result.StatusCode = (int)response.StatusCode;
-
-                return result;
+                return Login().Result.IsSuccess;
             }
             catch (Exception ex)
             {
-                return new APIResult
-                {
-                    Message = ex.Message,
-                    StatusCode = 000,
-                    IsSuccess = false,
-                };
+                MainLogger.Error("CheckConnection ex");
+                MainLogger.Error(ex);
+                return false;
             }
         }
 
-        static async Task<APIResult> GetRequest(string endPoint, object requestObject)
+        public static async Task<APIResult> Login()
         {
-            var result = new APIResult();
             try
             {
-                string apiUrl = $"{_hostName}{endPoint}";
-                var request = new HttpRequestMessage(HttpMethod.Post, apiUrl);
-                string jsonRequest = JsonConvert.SerializeObject(requestObject, Formatting.Indented);
-                var content = new StringContent(jsonRequest, null, _mediaType);
-                request.Content = content;
-                var response = await _httpClient.SendAsync(request);
-                var res = response.Content.ReadAsStringAsync().Result;
-                result.Message = res;
-                result.ReturnData = res;
-                result.IsSuccess = response.IsSuccessStatusCode;
-                result.StatusCode = (int)response.StatusCode;
-
-                return result;
+                string endPoint = "api/Account/Login";
+                var obj = new
+                {
+                    email = _email,
+                    passWord = _passWord,
+                    rememberMe = true,
+                    returnUrl = ""
+                };
+                return await PostRequest(endPoint, obj);
             }
             catch (Exception ex)
             {
-                return new APIResult
-                {
-                    Message = ex.Message,
-                    StatusCode = 000,
-                    IsSuccess = false,
-                };
+                MainLogger.Error("CreateSession exception " + ex);
+                return new APIResult();
             }
         }
 
-        public static async void GetToken()
-        {
-            while (true)
-            {
-                try
-                {
-                    var client = new HttpClient();
-                    var request = new HttpRequestMessage(HttpMethod.Post, "https://vidsto-api.uro-solution.info/api/Account/Login");
-                    var requestObject = new Account
-                    {
-                        Email = _email,
-                        Password = _passWord,
-                        RememberMe = true,
-                        ReturnUrl = _hostName,
-                    };
-                    string jsonRequest = JsonConvert.SerializeObject(requestObject, Formatting.Indented);
-                    var content = new StringContent(jsonRequest, null, _mediaType);
-                    request.Content = content;
-                    var response = await client.SendAsync(request);
-                    if (response.IsSuccessStatusCode)
-                    {
-                        string resJson = response.Content.ReadAsStringAsync().Result;
-                        JObject js = JObject.Parse(resJson);
-                        token = js["content"]["token"].ToString();
-                        refreshToken = js["content"]["refreshToken"].ToString();
-                        MainLogger.Info("Get Token OK!");
-                        break;
-                    }
-                    else
-                    {
-                        MainLogger.Error("Lỗi get token từ server");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    MainLogger.Error($"GetToken exception: {ex}");
-                }
-                finally { await Task.Delay(5000); }
-            }
-        }
         public static async Task<APIResult> CreateSession(string scannerCode, string userId, int deskId)
         {
             APIResult result = new APIResult();
-            string failMsg = string.Empty;
             try
             {
                 string endPoint = "api/cms/Desk/StartSession";
-                string successMsg = $"MaNV = {userId} đăng ký làm tại bàn deskId={deskId} thành công!";
-                failMsg = $"MaNV = {userId} đăng ký làm tại bàn deskId={deskId} thất bại!";
-
                 var requestObject = new
                 {
                     ScannerCode = scannerCode,
@@ -150,18 +82,9 @@ namespace ApiServices
                     DeskId = deskId
                 };
                 result = await PostRequest(endPoint, requestObject);
-                if (result.IsSuccess)
-                {
-                    result.Message = (successMsg);
-                }
-                else
-                {
-                    result.Message = failMsg;
-                }
             }
             catch (Exception ex)
             {
-                MainLogger.Error(failMsg);
                 MainLogger.Error("CreateSession exception " + ex);
                 result.Message = ex.Message;
             }
@@ -236,14 +159,19 @@ namespace ApiServices
                     OrderId = orderId
                 };
                 result = await PostRequest(endPoint, requestObject);
+                if (result.Message.ToLower().Contains("không có đơn nào đang được đóng"))
+                {
+                    result.IsSuccess = true;
+                }
                 if (result.IsSuccess)
                 {
-                    result.Message = (successMsg);
                     var responseBody = result.ReturnData;
                     var data = JsonConvert.DeserializeObject<dynamic>(responseBody);
                     if (data != null)
                     {
-                        result.ReturnData = data?.content?.id?.ToString();
+                        {
+                            result.ReturnData = data?.content?.id?.ToString();
+                        }
                     }
                 }
                 else
@@ -263,8 +191,12 @@ namespace ApiServices
         {
             try
             {
+                if (_hostName.EndsWith("/"))
+                {
+                    _hostName = _hostName.TrimEnd('/');
+                }
                 var client = new HttpClient();
-                var request = new HttpRequestMessage(HttpMethod.Post, $"{_hostName}api/cms/Video/Upload");
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{_hostName}/api/cms/Video/Upload");
                 var multipartContent = new MultipartFormDataContent();
 
                 foreach (var videoPath in videoUpload.VideoPaths)
@@ -286,13 +218,13 @@ namespace ApiServices
                         }
                         catch (Exception ex)
                         {
-                            MainLogger.Error($"Error processing file {videoPath}: {ex.Message}");
+                            VideoLogger.Error($"Error processing file {videoPath}: {ex.Message}");
                             // Handle exception as needed
                         }
                     }
                     else
                     {
-                        MainLogger.Error($"File not found: {videoPath}");
+                        VideoLogger.Error($"File not found: {videoPath}");
                     }
                 }
 
@@ -300,14 +232,15 @@ namespace ApiServices
                 multipartContent.Add(new StringContent(videoUpload.CameraCode ?? ""), "CameraCode");
                 request.Content = multipartContent;
                 var response = await client.SendAsync(request);
+                string responseContent = await response.Content.ReadAsStringAsync();
                 if (response.IsSuccessStatusCode)
                 {
-                    MainLogger.Info($"Videos uploaded successfully. OrderCode = {videoUpload.OrderCode}");
+                    VideoLogger.Info($"OrderCode = {videoUpload.OrderCode}. {responseContent}");
                 }
                 else
                 {
-                    string responseContent = await response.Content.ReadAsStringAsync();
-                    MainLogger.Error($"Failed to upload videos. Status code: {response.StatusCode}, Response: {responseContent}");
+                    VideoLogger.Error(responseContent);
+                    VideoLogger.Error($"Failed to upload videos. Status code: {response.StatusCode}, Response: {responseContent}");
                 }
                 return new APIResult
                 {
@@ -318,87 +251,81 @@ namespace ApiServices
             }
             catch (Exception ex)
             {
-                MainLogger.Error(ex);
+                VideoLogger.Error(ex);
                 return new APIResult() { Message = ex.ToString() };
             }
         }
-
-        public static async Task<APIResult> UploadVideoNew(Video videoUpload)
+        private static async Task<APIResult> PostRequest(string endPoint, object requestObject)
         {
-            APIResult result = new APIResult();
-            string failMsg = $"Failed to upload videos for OrderCode {videoUpload.OrderCode}!";
+            var result = new APIResult();
             try
             {
-                string endPoint = "api/cms/Video/Upload";
-                string successMsg = $"Videos uploaded successfully for OrderCode {videoUpload.OrderCode}!";
-
-                var multipartContent = new MultipartFormDataContent();
-
-                foreach (var videoPath in videoUpload.VideoPaths)
+                if (_hostName.EndsWith("/"))
                 {
-                    if (File.Exists(videoPath))
-                    {
-                        try
-                        {
-                            byte[] videoBytes;
-                            using (var fs = new FileStream(videoPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                            {
-                                videoBytes = new byte[fs.Length];
-                                fs.Read(videoBytes, 0, videoBytes.Length);
-                            }
-                            var videoContent = new ByteArrayContent(videoBytes);
-                            videoContent.Headers.ContentType = new MediaTypeHeaderValue("video/mp4");
-                            videoContent.Headers.ContentLength = videoBytes.Length;
-                            multipartContent.Add(videoContent, "Videos", Path.GetFileName(videoPath));
-                        }
-                        catch (Exception ex)
-                        {
-                            MainLogger.Error($"Error processing file {videoPath}: {ex.Message}");
-                        }
-                    }
-                    else
-                    {
-                        MainLogger.Error($"File not found: {videoPath}");
-                    }
+                    _hostName = _hostName.TrimEnd('/');
                 }
-
-                multipartContent.Add(new StringContent(videoUpload.OrderId), "OrderId");
-                multipartContent.Add(new StringContent(videoUpload.CameraCode ?? ""), "CameraCode");
-
-                result = await PostRequest(endPoint, multipartContent);
-
-                if (result.IsSuccess)
+                string apiUrl = $"{_hostName}/{endPoint}";
+                var request = new HttpRequestMessage(HttpMethod.Post, apiUrl);
+                string jsonRequest = JsonConvert.SerializeObject(requestObject, Formatting.Indented);
+                var content = new StringContent(jsonRequest, null, _mediaType);
+                request.Content = content;
+                var response = await _httpClient.SendAsync(request);
+                var res = response.Content.ReadAsStringAsync().Result;
+                result.Message = res;
+                result.ReturnData = res;
+                result.IsSuccess = response.IsSuccessStatusCode;
+                result.StatusCode = (int)response.StatusCode;
+                if (!response.IsSuccessStatusCode)
                 {
-                    var responseBody = result.ReturnData;
-                    result.Message = successMsg;
-                    MainLogger.Info(result.Message);
-                    try
-                    {
-                        var data = JsonConvert.DeserializeObject<dynamic>(responseBody);
-                        if (data != null)
-                        {
-                            result.ReturnData = data?.content?.id?.ToString();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        MainLogger.Error(ex);
-                    }
+                    result.ErrorMessage = res;
                 }
-                else
-                {
-                    result.Message = failMsg;
-                    MainLogger.Error(result.Message);
-                }
+                return result;
             }
             catch (Exception ex)
             {
-                MainLogger.Error(failMsg);
-                MainLogger.Error("UploadVideo exception " + ex);
-                result.Message = ex.Message;
+                MainLogger.Error("PostRequest ex");
+                MainLogger.Error(ex.Message);
+                MainLogger.Error(ex.InnerException);
+                return new APIResult
+                {
+                    Message = ex.Message + ex.InnerException,
+                    StatusCode = 000,
+                    IsSuccess = false,
+                };
             }
-
-            return result;
+        }
+        private static async Task<APIResult> GetRequest(string requestURL)
+        {
+            var result = new APIResult();
+            try
+            {
+                var response = await _httpClient.GetAsync(requestURL);
+                result.IsSuccess = response.IsSuccessStatusCode;
+                result.StatusCode = (int)response.StatusCode;
+                if (response.IsSuccessStatusCode)
+                {
+                    var res = response.Content.ReadAsStringAsync().Result;
+                    result.Message = res;
+                    result.ReturnData = res;
+                }
+                else
+                {
+                    result.ErrorMessage = $"{response.RequestMessage} - {result.StatusCode} - {response.ReasonPhrase}";
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error("GetRequest ex");
+                MainLogger.Error(ex.Message);
+                MainLogger.Error(ex.InnerException);
+                return new APIResult
+                {
+                    Message = ex.Message,
+                    StatusCode = 000,
+                    IsSuccess = false,
+                };
+            }
         }
         private static string GetMimeType(string filePath)
         {
@@ -414,6 +341,5 @@ namespace ApiServices
                     throw new InvalidOperationException("Unsupported file type");
             }
         }
-
     }
 }

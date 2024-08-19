@@ -3,6 +3,7 @@ using Common.Model;
 using H.Pipes;
 using H.Pipes.Args;
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,17 +21,33 @@ namespace STORE_VIDEO_APP
         {
             try
             {
+                // Khởi tạo PipeClient
                 _pipeClient = new PipeClient<Session>(_pipeServerName);
-                InitializeServerEvents();
+                InitializeServerEvents(); // Khởi tạo sự kiện cho server (nếu có)
+
+                // Kết nối với PipeServer
                 await _pipeClient.ConnectAsync();
+
+                // Giữ kết nối mở
                 await Task.Delay(Timeout.InfiniteTimeSpan);
+            }
+            catch (IOException ioEx)
+            {
+                // Xử lý lỗi IO riêng biệt
+                MainLogger.Error("IOException occurred while initializing pipe service.");
+                MainLogger.Error(ioEx);
             }
             catch (Exception ex)
             {
-                MainLogger.Error("InitializePipeService ex");
+                // Xử lý các lỗi khác
+                MainLogger.Error("An error occurred while initializing pipe service.");
                 MainLogger.Error(ex);
             }
-
+            finally
+            {
+                // Đảm bảo tài nguyên được giải phóng (nếu cần)
+                //_pipeClient?.Dispose();
+            }
         }
 
         private void InitializeServerEvents()

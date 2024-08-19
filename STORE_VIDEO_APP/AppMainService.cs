@@ -5,9 +5,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
-using static System.Collections.Specialized.BitVector32;
 
 namespace STORE_VIDEO_APP
 {
@@ -30,17 +28,39 @@ namespace STORE_VIDEO_APP
 
         private static Dictionary<string, Session> _listSession = new Dictionary<string, Session>();
 
-        private static CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
-
         int delayError = AppConfig.GetIntValue("DelayError");
+
         public AppMainService()
         {
-            MainLogger.Info("Start application - main service");
+            MainLogger.Info($"================================================================");
+            MainLogger.Info($"Start Main Service. Time {ServerTimeHelper.GetUnixTimeSeconds()}");
             InitializeScannerService();
-            InitializePipeService();
-            if (AppConfig.GetBooleanValue("EnableTest"))
+            //InitializePipeService();
+            //InitializeServerConnection();
+            if (AppConfig.IsTestEnviroment)
             {
                 InitializeTestService();
+            }
+        }
+
+        private void InitializeServerConnection()
+        {
+            try
+            {
+                var check = APIService.CheckConnection();
+                if (check)
+                {
+                    MainLogger.Info($"Check connect to API server {AppConfig.APIHostName} => OK");
+                }
+                else
+                {
+                    MainLogger.Error($"Check connect to API server {AppConfig.APIHostName} => Failed");
+                }
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error("InitializeApiService ex");
+                MainLogger.Error(ex);
             }
         }
 
@@ -58,7 +78,7 @@ namespace STORE_VIDEO_APP
 
         public async void ProcessCode(string scannerCode, string inputCode)
         {
-            MainLogger.Info($"ProcessCode({scannerCode},{inputCode.ToJson()})");
+            //MainLogger.Info($"ProcessCode({scannerCode},{inputCode.ToJson()})");
             try
             {
                 QRData qrData = GetQRData(inputCode);
@@ -118,9 +138,17 @@ namespace STORE_VIDEO_APP
 
                     if (currentSession != null)
                     {
-                        // Cập nhật thông tin nếu khác
+                        //kiểm tra xem có đang đóng đơn hàng nào không
+                        if (currentSession.CurrentOrder != null)
+                        {
+                            MainLogger.Warn($"Không thể đăng ký phiên làm việc khác, đang có đơn hàng \"{currentSession.CurrentOrder.OrderCode}\" chưa đóng xong!");
+                            return;
+                            //không cho thực hiện hành động gì khác vì phiên này đang đóng hàng dở 
+                        }
+                        else
                         if (currentSession.User.UserId != userId)
                         {
+                            // Cập nhật thông tin nếu khác
                             currentSession.User = new User { UserId = userId, DeskId = deskId };
                             currentSession.Scanner = new Scanner { ScannerCode = scannerCode };
                             currentSession.Cameras = listCamera;
@@ -139,7 +167,7 @@ namespace STORE_VIDEO_APP
                     };
                     _listSession.Add(scannerCode, currentSession);
                 }
-                
+
                 await CallApiStartSession(currentSession);
             }
             catch (Exception ex)
@@ -155,6 +183,8 @@ namespace STORE_VIDEO_APP
             {
                 APIResult result = new APIResult();
                 int retryCount = 0;
+                string successMsg = $"MaNV = {session.User.UserId} đăng ký làm tại bàn deskId={session.User.DeskId} thành công!";
+                string failMsg = $"MaNV = {session.User.UserId} đăng ký làm tại bàn deskId={session.User.DeskId} thất bại!";
                 while (true)
                 {
                     try
@@ -167,19 +197,20 @@ namespace STORE_VIDEO_APP
                         result = APIService.CreateSession(session.Scanner.ScannerCode, session.User.UserId, session.User.DeskId).Result;
                         if (result.IsSuccess)
                         {
-                            MainLogger.Info(result.Message);
+                            MainLogger.Info($"CallApiStartSession =>" + result.Message);
+                            MainLogger.Info(successMsg);
                             break;
                         }
                         else
                         {
                             //call api bi loi
-                            MainLogger.Error($"Error: {result.Message}");
+                            MainLogger.Error($"CallApiStartSession =>" + result.Message);
+                            MainLogger.Error(failMsg);
                             await Task.Delay(delayError * 1000);
                         }
                     }
                     catch (Exception ex)
                     {
-                        
                         MainLogger.Error(ex);
                     }
                     finally
@@ -216,7 +247,7 @@ namespace STORE_VIDEO_APP
                     //trước đó có đơn hàng đang đóng mà chưa quét mã kết thúc
                     if (session?.CurrentOrder != null)
                     {
-                        
+
                         var isOrderCreated = session.CurrentOrder.OrderCode == newOrderCode;
                         if (isOrderCreated)
                         {
@@ -230,20 +261,17 @@ namespace STORE_VIDEO_APP
                             await EndOrderSession(session);
                         }
                     }
-                    
+
+                    session.CurrentOrder = new Order
                     {
-                        //khong co don hang nao dang dong goi
-                        session.CurrentOrder = new Order
-                        {
-                            OrderCode = newOrderCode,
-                            StartTime = DateTime.Now,
-                            EndTime = DateTime.Now,
-                            Note = "Tạo lúc " + DateTime.Now,
-                            UserId = session.User.UserId,
-                            Status = 0,
-                        };
-                        await CallApiStartOrder(session);
-                    }
+                        OrderCode = newOrderCode,
+                        StartTime = ServerTimeHelper.GetUnixTimeSeconds(),
+                        EndTime = ServerTimeHelper.GetUnixTimeSeconds(),
+                        Note = "Tạo lúc " + ServerTimeHelper.GetUnixTimeSeconds(),
+                        UserId = session.User.UserId,
+                        Status = 0,
+                    };
+                    await CallApiStartOrder(session);
                 }
                 else
                 {
@@ -278,19 +306,20 @@ namespace STORE_VIDEO_APP
                         if (result.IsSuccess)
                         {
                             session.CurrentOrder.OrderId = result.ReturnData;
-                            MainLogger.Info(result.Message);
+                            MainLogger.Info($"CallApiStartOrder {session.CurrentOrder.OrderCode} =>" + result.Message);
                             break;
                         }
                         else
                         {
                             //call api bi loi
-                            MainLogger.Error(result.Message);
+                            MainLogger.Error($"CallApiStartOrder {session.CurrentOrder.OrderCode} =>" + result.ErrorMessage);
+
                         }
                     }
                     catch (Exception ex)
                     {
                         MainLogger.Error("Lỗi gửi lệnh đăng ký đơn lên server!");
-                        MainLogger.Error($"CallApiStartOrder Error "+ex);
+                        MainLogger.Error($"CallApiStartOrder Error " + ex);
                     }
                     finally
                     {
@@ -304,7 +333,7 @@ namespace STORE_VIDEO_APP
             }
             catch (Exception ex)
             {
-                MainLogger.Error("CallApiStartOrder ex "+ex);
+                MainLogger.Error("CallApiStartOrder ex " + ex);
             }
         }
 
@@ -322,7 +351,7 @@ namespace STORE_VIDEO_APP
                 {
                     return;
                 }
-                MainLogger.Info($"Kết thúc đóng gói hàng {qrData.OrderCode}");
+                //MainLogger.Info($"Kết thúc đóng gói hàng {qrData.OrderCode}");
                 int retryAction = 0;
                 while (true)
                 {
@@ -391,12 +420,14 @@ namespace STORE_VIDEO_APP
         {
             try
             {
+                MainLogger.Info($"Kết thúc đóng gói hàng {session.CurrentOrder.OrderCode}");
                 Order order = session.CurrentOrder;
                 bool requestEndOrder = await CallApiEndOrder(order);
 
                 //Call api kết thúc đơn thành công
                 if (requestEndOrder)
                 {
+                    MainLogger.Info($"Kết thúc đóng gói hàng {session.CurrentOrder.OrderCode} thành công!");
                     try
                     {
                         //gửi thông tin đơn cần lấy video vào pipe service
@@ -429,7 +460,7 @@ namespace STORE_VIDEO_APP
         {
             try
             {
-                order.EndTime = DateTime.Now;
+                order.EndTime = ServerTimeHelper.GetUnixTimeSeconds();
                 APIResult requestEndOrder = new APIResult();
                 int retryCount = 0;
                 while (true)
@@ -439,14 +470,19 @@ namespace STORE_VIDEO_APP
                         //CALL API
                         if (retryCount != 0)
                         {
-                            MainLogger.Warn($"Thử lại lần {retryCount}, gửi lệnh kết thúc đơn lên server!");
+                            MainLogger.Warn($"Thử lại lần {retryCount}, gửi lệnh kết thúc đơn lên server! OrderCode={order}");
                         }
                         requestEndOrder = APIService.EndOrder(order.OrderId, order.OrderCode).Result;
                         if (requestEndOrder.IsSuccess)
                         {
                             //call api ok
-                            MainLogger.Info(requestEndOrder.Message);
+                            MainLogger.Info($"CallApiEndOrder {order.OrderCode} =>" + requestEndOrder.Message);
                             return true;
+                        }
+                        else
+                        {
+                            MainLogger.Error($"CallApiEndOrder {order.OrderCode} =>" + requestEndOrder.ErrorMessage);
+                            return false;
                         }
                     }
                     catch (Exception ex)
@@ -458,9 +494,8 @@ namespace STORE_VIDEO_APP
                         if (!requestEndOrder.IsSuccess)
                         {
                             retryCount++;
-                           MainLogger.Error("Lỗi gửi lệnh kết thúc đơn lên server!");
+                            MainLogger.Error("Lỗi gửi lệnh kết thúc đơn lên server!");
                             await Task.Delay(delayError * 1000);
-
                         }
                     }
                 }
@@ -476,7 +511,7 @@ namespace STORE_VIDEO_APP
         {
             try
             {
-                MainLogger.Info($"GetQRData({input})");
+                //MainLogger.Info($"GetQRData({input})");
                 if (Function.IsValidQRJson(input))
                 {
                     return JsonConvert.DeserializeObject<QRData>(input);
@@ -513,7 +548,7 @@ namespace STORE_VIDEO_APP
 
                 string jsonNv12 = "{\"UserId\":\"67347a29-cede-4862-bfe0-b2ddaccae518\",\"DeskId\":7,\"Command\":\"STARTSESSION\",\"Cameras\":[{\"Name\":\"Camera 02 - Kho 01\",\"Code\":\"CAMERA_BAN02_KHO01\",\"CameraIP\":\"192.168.1.168:8000\",\"CameraChannel\":\"45\",\"Id\":19}]}";
                 string jsonNv13 = "{\"UserId\":\"c3a7b176-0689-4023-a268-ca0638d97af8\",\"DeskId\":8,\"Command\":\"STARTSESSION\",\"Cameras\":[{\"Name\":\"Camera 03 - Kho 01\",\"Code\":\"CAMERA_BAN03_KHO01\",\"CameraIP\":\"192.168.1.168:8000\",\"CameraChannel\":\"46\",\"Id\":18}]}";
-                
+
 
                 int i = 0;
 
@@ -535,7 +570,7 @@ namespace STORE_VIDEO_APP
                 //    ProcessCode(device2, "donhang2");
                 //    ProcessCode(device1, jsonEnd2);
                 //});                
-                
+
                 //Task.Run(() =>
                 //{
                 //    ProcessCode(device3, jsonNv13);

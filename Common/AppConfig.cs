@@ -11,7 +11,7 @@ namespace Common
 {
     public static class AppConfig
     {
-        public static NameValueCollection _config;
+        private static NameValueCollection _config;
         public static NameValueCollection GlobalConfig
         {
             get
@@ -23,10 +23,11 @@ namespace Common
                 return _config;
             }
         }
-        static AppConfig()
-        {
-        }
-        static NameValueCollection GetAppConfig()
+        public static bool IsTestEnviroment => AppConfig.GetBooleanValue("EnableTest");
+        public static string APIHostName =>  AppConfig.GetStringValue("APIHostName");
+        public static string CameraHostName =>  AppConfig.GetStringValue("CameraAdminIP");
+
+        private static NameValueCollection GetAppConfig()
         {
             NameValueCollection appSettings = new NameValueCollection();
             try
