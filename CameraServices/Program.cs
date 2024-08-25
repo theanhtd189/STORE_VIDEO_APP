@@ -1,8 +1,4 @@
-﻿using CameraServices;
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
+﻿using System;
 using System.Windows.Forms;
 
 namespace CameraServices
@@ -15,8 +11,8 @@ namespace CameraServices
         [STAThread]
         public static void Main()
         {
-            Application.EnableVisualStyles(); 
-            Application.SetCompatibleTextRenderingDefault(false); 
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new Main());
         }
     }

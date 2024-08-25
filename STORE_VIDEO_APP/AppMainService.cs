@@ -3,14 +3,19 @@ using Common;
 using Common.Model;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
 namespace STORE_VIDEO_APP
 {
+    /// <summary>
+    /// Application Main Services
+    /// </summary>
     public partial class AppMainService
     {
+        #region FIELDS, PROPERTIES
         /// <summary>
         /// Lệnh đăng ký phiên làm việc
         /// </summary>
@@ -28,21 +33,23 @@ namespace STORE_VIDEO_APP
 
         private static Dictionary<string, Session> _listSession = new Dictionary<string, Session>();
 
-        int delayError = AppConfig.GetIntValue("DelayError");
+        readonly int delayError = AppConfig.GetIntValue("DelayError");
+        #endregion
 
+        #region CONSTRUCTOR
         public AppMainService()
         {
-            MainLogger.Info($"================================================================");
+            MainLogger.Info($"================================================================================================================================");
             MainLogger.Info($"Start Main Service. Time {ServerTimeHelper.GetUnixTimeSeconds()}");
             InitializeScannerService();
-            //InitializePipeService();
-            //InitializeServerConnection();
-            if (AppConfig.IsTestEnviroment)
-            {
-                InitializeTestService();
-            }
+            InitializePipeService();
+            InitializeServerConnection();
+            InitializeTestService();
         }
 
+        #endregion
+
+        #region INIT
         private void InitializeServerConnection()
         {
             try
@@ -63,20 +70,61 @@ namespace STORE_VIDEO_APP
                 MainLogger.Error(ex);
             }
         }
-
         private void InitializeTestService()
         {
             try
             {
-                TestProgram();
+                if (AppConfig.IsTestEnviroment)
+                {
+
+                }
             }
             catch (Exception ex)
             {
                 MainLogger.Error(ex);
             }
         }
+        #endregion
 
-        public async void ProcessCode(string scannerCode, string inputCode)
+        #region ACTION PROCESS
+
+        private readonly object _lock = new object(); // Một khóa chung cho toàn bộ bộ đệm
+
+        private readonly ConcurrentDictionary<string, object> _locks = new ConcurrentDictionary<string, object>();
+        private void ProcessBuffer(string portName)
+        {
+            // Sử dụng cùng một khóa như trong DataReceivedHandler
+            var portLock = _locks.GetOrAdd(portName, new object());
+
+            try
+            {
+                var dataBuffer = _dataBuffers[portName];
+                lock (portLock) // Khóa cụ thể cho cổng
+                {
+                    int newLineIndex;
+                    while ((newLineIndex = dataBuffer.ToString().IndexOf('\r')) >= 0)
+                    {
+                        var line = dataBuffer.ToString(0, newLineIndex);
+                        dataBuffer.Remove(0, newLineIndex + 1); // Bỏ qua ký tự '\r'
+                        string idMachine = GetIDFromPort(portName);
+                        if (!string.IsNullOrEmpty(idMachine))
+                        {
+                            Task.Run(() => ProcessCode(idMachine, line)); // Xử lý dòng dữ liệu
+                        }
+                        else
+                        {
+                            MainLogger.Warn("Không đọc được thông tin máy quét");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error("Xảy ra lỗi trong ProcessBuffer");
+                MainLogger.Error(ex);
+            }
+        }
+        public async Task ProcessCode(string scannerCode, string inputCode)
         {
             //MainLogger.Info($"ProcessCode({scannerCode},{inputCode.ToJson()})");
             try
@@ -107,6 +155,60 @@ namespace STORE_VIDEO_APP
             catch (Exception ex)
             {
                 MainLogger.Error($"ProcessCode({scannerCode},{inputCode})");
+                MainLogger.Error(ex);
+            }
+        }
+        private async Task ProcessStartOrder(string scannerCode, QRData qrData)
+        {
+            try
+            {
+                MainLogger.Info($"ProcessStartOrder({scannerCode},{qrData.ToJson()})");
+                if (qrData == null)
+                {
+                    return;
+                }
+                string newOrderCode = qrData.OrderCode;
+                if (_listSession.Keys.Contains(scannerCode))
+                {
+                    var session = _listSession[scannerCode];
+
+                    //trước đó có đơn hàng đang đóng mà chưa quét mã kết thúc
+                    if (session?.CurrentOrder != null)
+                    {
+
+                        var isOrderCreated = session.CurrentOrder.OrderCode == newOrderCode;
+                        if (isOrderCreated)
+                        {
+                            MainLogger.Warn("Đơn này đã quét từ trước rồi");
+                            return;
+                        }
+                        else
+                        {
+                            //đơn hàng trước đó và đơn hàng vừa mới quét khác nhau
+                            //=> kết thúc đơn cũ để bắt đầu đơn mới
+                            await EndOrderSession(session);
+                        }
+                    }
+
+                    session.CurrentOrder = new Order
+                    {
+                        OrderCode = newOrderCode,
+                        StartTime = ServerTimeHelper.GetUnixTimeSeconds(),
+                        EndTime = ServerTimeHelper.GetUnixTimeSeconds(),
+                        Note = "Tạo lúc " + ServerTimeHelper.GetUnixTimeSeconds(),
+                        UserId = session.User.UserId,
+                        Status = 0,
+                    };
+                    await CallApiStartOrder(session);
+                }
+                else
+                {
+                    MainLogger.Error("=> Bạn chưa quét mã đăng ký phiên làm việc!");
+                }
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error($"StartOrder({scannerCode},{qrData})");
                 MainLogger.Error(ex);
             }
         }
@@ -174,166 +276,6 @@ namespace STORE_VIDEO_APP
             {
                 MainLogger.Error($"CreateSession({scannerCode},{qrData})");
                 MainLogger.Error(ex);
-            }
-        }
-
-        private async Task CallApiStartSession(Session session)
-        {
-            try
-            {
-                APIResult result = new APIResult();
-                int retryCount = 0;
-                string successMsg = $"MaNV = {session.User.UserId} đăng ký làm tại bàn deskId={session.User.DeskId} thành công!";
-                string failMsg = $"MaNV = {session.User.UserId} đăng ký làm tại bàn deskId={session.User.DeskId} thất bại!";
-                while (true)
-                {
-                    try
-                    {
-                        //CALL API
-                        if (retryCount != 0)
-                        {
-                            MainLogger.Warn($"Thử lại lần {retryCount}, gửi lệnh đăng ký phiên làm việc lên server!");
-                        }
-                        result = APIService.CreateSession(session.Scanner.ScannerCode, session.User.UserId, session.User.DeskId).Result;
-                        if (result.IsSuccess)
-                        {
-                            MainLogger.Info($"CallApiStartSession =>" + result.Message);
-                            MainLogger.Info(successMsg);
-                            break;
-                        }
-                        else
-                        {
-                            //call api bi loi
-                            MainLogger.Error($"CallApiStartSession =>" + result.Message);
-                            MainLogger.Error(failMsg);
-                            await Task.Delay(delayError * 1000);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        MainLogger.Error(ex);
-                    }
-                    finally
-                    {
-                        if (!result.IsSuccess)
-                        {
-                            retryCount++;
-                            MainLogger.Error("Lỗi gửi lệnh đăng ký đơn lên server!");
-                            await Task.Delay(delayError * 1000);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MainLogger.Error($"CallApiStartSession Error: {ex}");
-            }
-        }
-
-        private async Task ProcessStartOrder(string scannerCode, QRData qrData)
-        {
-            try
-            {
-                MainLogger.Info($"ProcessStartOrder({scannerCode},{qrData.ToJson()})");
-                if (qrData == null)
-                {
-                    return;
-                }
-                string newOrderCode = qrData.OrderCode;
-                if (_listSession.Keys.Contains(scannerCode))
-                {
-                    var session = _listSession[scannerCode];
-
-                    //trước đó có đơn hàng đang đóng mà chưa quét mã kết thúc
-                    if (session?.CurrentOrder != null)
-                    {
-
-                        var isOrderCreated = session.CurrentOrder.OrderCode == newOrderCode;
-                        if (isOrderCreated)
-                        {
-                            MainLogger.Warn("Đơn này đã quét từ trước rồi");
-                            return;
-                        }
-                        else
-                        {
-                            //đơn hàng trước đó và đơn hàng vừa mới quét khác nhau
-                            //=> kết thúc đơn cũ để bắt đầu đơn mới
-                            await EndOrderSession(session);
-                        }
-                    }
-
-                    session.CurrentOrder = new Order
-                    {
-                        OrderCode = newOrderCode,
-                        StartTime = ServerTimeHelper.GetUnixTimeSeconds(),
-                        EndTime = ServerTimeHelper.GetUnixTimeSeconds(),
-                        Note = "Tạo lúc " + ServerTimeHelper.GetUnixTimeSeconds(),
-                        UserId = session.User.UserId,
-                        Status = 0,
-                    };
-                    await CallApiStartOrder(session);
-                }
-                else
-                {
-                    MainLogger.Error("=> Bạn chưa quét mã đăng ký phiên làm việc!");
-                }
-            }
-            catch (Exception ex)
-            {
-                MainLogger.Error($"StartOrder({scannerCode},{qrData})");
-                MainLogger.Error(ex);
-            }
-        }
-
-        private async Task CallApiStartOrder(Session session)
-        {
-            try
-            {
-                MainLogger.Info("CallApiStartOrder");
-                APIResult result = new APIResult();
-                int retryCount = 0;
-                while (true)
-                {
-                    try
-                    {
-                        //CALL API
-                        if (retryCount != 0)
-                        {
-                            MainLogger.Error($"Retry call API StartOrder, {retryCount} times!");
-                        }
-
-                        result = await APIService.CreateOrder(session.CurrentOrder.OrderCode, session.User.DeskId);
-                        if (result.IsSuccess)
-                        {
-                            session.CurrentOrder.OrderId = result.ReturnData;
-                            MainLogger.Info($"CallApiStartOrder {session.CurrentOrder.OrderCode} =>" + result.Message);
-                            break;
-                        }
-                        else
-                        {
-                            //call api bi loi
-                            MainLogger.Error($"CallApiStartOrder {session.CurrentOrder.OrderCode} =>" + result.ErrorMessage);
-
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        MainLogger.Error("Lỗi gửi lệnh đăng ký đơn lên server!");
-                        MainLogger.Error($"CallApiStartOrder Error " + ex);
-                    }
-                    finally
-                    {
-                        if (!result.IsSuccess)
-                        {
-                            await Task.Delay(delayError * 1000);
-                            retryCount++;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MainLogger.Error("CallApiStartOrder ex " + ex);
             }
         }
 
@@ -450,6 +392,113 @@ namespace STORE_VIDEO_APP
                 MainLogger.Error(ex);
             }
         }
+        #endregion
+
+        #region CALL API
+        private async Task CallApiStartSession(Session session)
+        {
+            try
+            {
+                APIResult result = new APIResult();
+                int retryCount = 0;
+                string successMsg = $"MaNV = {session.User.UserId} đăng ký làm tại bàn deskId={session.User.DeskId} thành công!";
+                string failMsg = $"MaNV = {session.User.UserId} đăng ký làm tại bàn deskId={session.User.DeskId} thất bại!";
+                while (true)
+                {
+                    try
+                    {
+                        //CALL API
+                        if (retryCount != 0)
+                        {
+                            MainLogger.Warn($"Thử lại lần {retryCount}, gửi lệnh đăng ký phiên làm việc lên server!");
+                        }
+                        result = APIService.CreateSession(session.Scanner.ScannerCode, session.User.UserId, session.User.DeskId).Result;
+                        if (result.IsSuccess)
+                        {
+                            MainLogger.Info($"CallApiStartSession =>" + result.Message);
+                            MainLogger.Info(successMsg);
+                            break;
+                        }
+                        else
+                        {
+                            //call api bi loi
+                            MainLogger.Error($"CallApiStartSession =>" + result.Message);
+                            MainLogger.Error(failMsg);
+                            await Task.Delay(delayError * 1000);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MainLogger.Error(ex);
+                    }
+                    finally
+                    {
+                        if (!result.IsSuccess)
+                        {
+                            retryCount++;
+                            MainLogger.Error("Lỗi gửi lệnh đăng ký đơn lên server!");
+                            await Task.Delay(delayError * 1000);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error($"CallApiStartSession Error: {ex}");
+            }
+        }
+
+        private async Task CallApiStartOrder(Session session)
+        {
+            try
+            {
+                MainLogger.Info("CallApiStartOrder");
+                APIResult result = new APIResult();
+                int retryCount = 0;
+                while (true)
+                {
+                    try
+                    {
+                        //CALL API
+                        if (retryCount != 0)
+                        {
+                            MainLogger.Error($"Retry call API StartOrder, {retryCount} times!");
+                        }
+
+                        result = await APIService.CreateOrder(session.CurrentOrder.OrderCode, session.User.DeskId);
+                        if (result.IsSuccess)
+                        {
+                            session.CurrentOrder.OrderId = result.ReturnData;
+                            MainLogger.Info($"CallApiStartOrder {session.CurrentOrder.OrderCode} =>" + result.Message);
+                            break;
+                        }
+                        else
+                        {
+                            //call api bi loi
+                            MainLogger.Error($"CallApiStartOrder {session.CurrentOrder.OrderCode} =>" + result.ErrorMessage);
+
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MainLogger.Error("Lỗi gửi lệnh đăng ký đơn lên server!");
+                        MainLogger.Error($"CallApiStartOrder Error " + ex);
+                    }
+                    finally
+                    {
+                        if (!result.IsSuccess)
+                        {
+                            await Task.Delay(delayError * 1000);
+                            retryCount++;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error("CallApiStartOrder ex " + ex);
+            }
+        }
 
         /// <summary>
         /// Call API kết thúc đơn
@@ -507,6 +556,10 @@ namespace STORE_VIDEO_APP
             }
         }
 
+        #endregion
+
+        #region FUNCTION
+
         public QRData GetQRData(string input)
         {
             try
@@ -532,60 +585,6 @@ namespace STORE_VIDEO_APP
             }
         }
 
-        public void TestProgram()
-        {
-            try
-            {
-                string jsonNv11 = "{\"UserId\":\"8171e130-6a3c-4d8e-9167-ddcb52672abc\",\"DeskId\":6,\"Command\":\"STARTSESSION\",\"Cameras\":[{\"Name\":\"Camera 01 - Kho 01\",\"Code\":\"CAMERA_BAN01_KHO01\",\"CameraIP\":\"192.168.1.168:8000\",\"CameraChannel\":\"47\",\"Id\":20}]}";
-
-                string jsonEnd1 = "{\"DeskId\":6,\"Command\":\"ENDORDER\"}";
-                string jsonEnd2 = "{\"DeskId\":7,\"Command\":\"ENDORDER\"}";
-                string jsonEnd3 = "{\"DeskId\":8,\"Command\":\"ENDORDER\"}";
-
-                string device1 = "SCN1";
-                string device3 = "SCN3";
-                string device2 = "SCN2";
-
-                string jsonNv12 = "{\"UserId\":\"67347a29-cede-4862-bfe0-b2ddaccae518\",\"DeskId\":7,\"Command\":\"STARTSESSION\",\"Cameras\":[{\"Name\":\"Camera 02 - Kho 01\",\"Code\":\"CAMERA_BAN02_KHO01\",\"CameraIP\":\"192.168.1.168:8000\",\"CameraChannel\":\"45\",\"Id\":19}]}";
-                string jsonNv13 = "{\"UserId\":\"c3a7b176-0689-4023-a268-ca0638d97af8\",\"DeskId\":8,\"Command\":\"STARTSESSION\",\"Cameras\":[{\"Name\":\"Camera 03 - Kho 01\",\"Code\":\"CAMERA_BAN03_KHO01\",\"CameraIP\":\"192.168.1.168:8000\",\"CameraChannel\":\"46\",\"Id\":18}]}";
-
-
-                int i = 0;
-
-                //{
-                //    string jsonStart1 = $"ORDTEST{i++}-" + DateTime.Now.ToString("ddMMyy-HHmmss");
-                //    string jsonStart2 = $"ORDTEST{i}-" + DateTime.Now.ToString("ddMMyy-HHmmss");
-
-                Task.Run(() =>
-                {
-                    ProcessCode(device1, jsonNv11);
-
-                    ProcessCode(device1, "donhang1");
-                    ProcessCode(device1, jsonEnd1);
-                });
-
-                //Task.Run(() =>
-                //{
-                //    ProcessCode(device2, jsonNv12);
-                //    ProcessCode(device2, "donhang2");
-                //    ProcessCode(device1, jsonEnd2);
-                //});                
-
-                //Task.Run(() =>
-                //{
-                //    ProcessCode(device3, jsonNv13);
-                //    ProcessCode(device3, "donhang3");
-                //    ProcessCode(device1, jsonEnd3);
-                //});
-
-                //Thread.Sleep(5*60000);           
-            }
-            catch (Exception ex)
-            {
-                MainLogger.Error(" ex");
-                MainLogger.Error(ex);
-            }
-        }
+        #endregion
     }
-
 }

@@ -14,9 +14,14 @@ namespace STORE_VIDEO_APP
     /// </summary>
     public partial class AppMainService
     {
+        #region FIELDS, PROPERTIES
         private PipeClient<Session> _pipeClient;
-        private readonly string _pipeServerName = AppConfig.GetStringValue("ServerPipeName")?? "StoreVideo_PipeService";
 
+        private readonly string _pipeServerName = AppConfig.GetStringValue("ServerPipeName") ?? "StoreVideo_PipeService";
+
+        #endregion
+
+        #region INIT
         private async void InitializePipeService()
         {
             try
@@ -65,6 +70,9 @@ namespace STORE_VIDEO_APP
                 MainLogger.Error(ex);
             }
         }
+        #endregion
+
+        #region EVENT
         private void DisconnectServer(object o, ConnectionEventArgs<Session> args)
         {
             MainLogger.Warn($"Disconnected from server {_pipeServerName}");
@@ -105,5 +113,6 @@ namespace STORE_VIDEO_APP
                 MainLogger.Error(ex);
             }
         }
+        #endregion
     }
 }

@@ -1,7 +1,6 @@
 ﻿using Common;
 using Common.Model;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
 using System.Net.Http;
@@ -21,8 +20,12 @@ namespace ApiServices
 
     public static class APIService
     {
+#pragma warning disable CS0169 // The field 'APIService.token' is never used
         private static string token;
+#pragma warning restore CS0169 // The field 'APIService.token' is never used
+#pragma warning disable CS0169 // The field 'APIService.refreshToken' is never used
         private static string refreshToken;
+#pragma warning restore CS0169 // The field 'APIService.refreshToken' is never used
         private static string _hostName = AppConfig.GetStringValue("APIHostName");
         private static readonly string _email = AppConfig.GetStringValue("APIAdminUsername");
         private static readonly string _passWord = AppConfig.GetStringValue("APIAdminPassword");
@@ -33,12 +36,105 @@ namespace ApiServices
         {
             _httpClient = new HttpClient();
         }
-
+        
+        private static async Task<APIResult> PostRequest(string endPoint, object requestObject)
+        {
+            var result = new APIResult();
+            try
+            {
+                if (_hostName.EndsWith("/"))
+                {
+                    _hostName = _hostName.TrimEnd('/');
+                }
+                if (endPoint.StartsWith("/"))
+                {
+                    endPoint = endPoint.TrimStart('/');
+                }
+                string apiUrl = $"{_hostName}/{endPoint}";
+                var request = new HttpRequestMessage(HttpMethod.Post, apiUrl);
+                string jsonRequest = JsonConvert.SerializeObject(requestObject, Formatting.Indented);
+                var content = new StringContent(jsonRequest, null, _mediaType);
+                request.Content = content;
+                var response = await _httpClient.SendAsync(request);
+                var res = response.Content.ReadAsStringAsync().Result;
+                result.Message = res;
+                result.ReturnData = res;
+                result.IsSuccess = response.IsSuccessStatusCode;
+                result.StatusCode = (int)response.StatusCode;
+                if (!response.IsSuccessStatusCode)
+                {
+                    result.ErrorMessage = res;
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error("PostRequest ex");
+                MainLogger.Error(ex.Message);
+                MainLogger.Error(ex.InnerException);
+                return new APIResult
+                {
+                    Message = ex.Message + ex.InnerException,
+                    StatusCode = 000,
+                    IsSuccess = false,
+                };
+            }
+        }
+        
+        private static async Task<APIResult> GetRequest(string requestURL)
+        {
+            var result = new APIResult();
+            try
+            {
+                var response = await _httpClient.GetAsync(requestURL);
+                result.IsSuccess = response.IsSuccessStatusCode;
+                result.StatusCode = (int)response.StatusCode;
+                if (response.IsSuccessStatusCode)
+                {
+                    var res = response.Content.ReadAsStringAsync().Result;
+                    result.Message = res;
+                    result.ReturnData = res;
+                }
+                else
+                {
+                    result.ErrorMessage = $"{response.RequestMessage} - {result.StatusCode} - {response.ReasonPhrase}";
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                MainLogger.Error("GetRequest ex");
+                MainLogger.Error(ex.Message);
+                MainLogger.Error(ex.InnerException);
+                return new APIResult
+                {
+                    Message = ex.Message,
+                    StatusCode = 000,
+                    IsSuccess = false,
+                };
+            }
+        }
+        
+        private static string GetMimeType(string filePath)
+        {
+            switch (System.IO.Path.GetExtension(filePath).ToLower())
+            {
+                case ".mov":
+                    return "video/quicktime";
+                case ".mp4":
+                    return "video/mp4";
+                case ".ts":
+                    return "video/mp2t";
+                default:
+                    throw new InvalidOperationException("Unsupported file type");
+            }
+        }
+        
         public static bool CheckConnection()
         {
             try
             {
-                return Login().Result.IsSuccess;
+                return Login().Result.StatusCode != 404 && Login().Result.StatusCode != 000;
             }
             catch (Exception ex)
             {
@@ -90,6 +186,7 @@ namespace ApiServices
             }
             return result;
         }
+        
         public static async Task<APIResult> CreateOrder(string orderCode, int deskId)
         {
             APIResult result = new APIResult();
@@ -143,6 +240,7 @@ namespace ApiServices
             }
             return result;
         }
+        
         public static async Task<APIResult> EndOrder(string orderId, string orderCode)
         {
             APIResult result = new APIResult();
@@ -187,6 +285,7 @@ namespace ApiServices
             }
             return result;
         }
+        
         public static async Task<APIResult> UploadVideo(Video videoUpload)
         {
             try
@@ -255,91 +354,6 @@ namespace ApiServices
                 return new APIResult() { Message = ex.ToString() };
             }
         }
-        private static async Task<APIResult> PostRequest(string endPoint, object requestObject)
-        {
-            var result = new APIResult();
-            try
-            {
-                if (_hostName.EndsWith("/"))
-                {
-                    _hostName = _hostName.TrimEnd('/');
-                }
-                string apiUrl = $"{_hostName}/{endPoint}";
-                var request = new HttpRequestMessage(HttpMethod.Post, apiUrl);
-                string jsonRequest = JsonConvert.SerializeObject(requestObject, Formatting.Indented);
-                var content = new StringContent(jsonRequest, null, _mediaType);
-                request.Content = content;
-                var response = await _httpClient.SendAsync(request);
-                var res = response.Content.ReadAsStringAsync().Result;
-                result.Message = res;
-                result.ReturnData = res;
-                result.IsSuccess = response.IsSuccessStatusCode;
-                result.StatusCode = (int)response.StatusCode;
-                if (!response.IsSuccessStatusCode)
-                {
-                    result.ErrorMessage = res;
-                }
-                return result;
-            }
-            catch (Exception ex)
-            {
-                MainLogger.Error("PostRequest ex");
-                MainLogger.Error(ex.Message);
-                MainLogger.Error(ex.InnerException);
-                return new APIResult
-                {
-                    Message = ex.Message + ex.InnerException,
-                    StatusCode = 000,
-                    IsSuccess = false,
-                };
-            }
-        }
-        private static async Task<APIResult> GetRequest(string requestURL)
-        {
-            var result = new APIResult();
-            try
-            {
-                var response = await _httpClient.GetAsync(requestURL);
-                result.IsSuccess = response.IsSuccessStatusCode;
-                result.StatusCode = (int)response.StatusCode;
-                if (response.IsSuccessStatusCode)
-                {
-                    var res = response.Content.ReadAsStringAsync().Result;
-                    result.Message = res;
-                    result.ReturnData = res;
-                }
-                else
-                {
-                    result.ErrorMessage = $"{response.RequestMessage} - {result.StatusCode} - {response.ReasonPhrase}";
-                }
-                return result;
-            }
-            catch (Exception ex)
-            {
-                MainLogger.Error("GetRequest ex");
-                MainLogger.Error(ex.Message);
-                MainLogger.Error(ex.InnerException);
-                return new APIResult
-                {
-                    Message = ex.Message,
-                    StatusCode = 000,
-                    IsSuccess = false,
-                };
-            }
-        }
-        private static string GetMimeType(string filePath)
-        {
-            switch (System.IO.Path.GetExtension(filePath).ToLower())
-            {
-                case ".mov":
-                    return "video/quicktime";
-                case ".mp4":
-                    return "video/mp4";
-                case ".ts":
-                    return "video/mp2t";
-                default:
-                    throw new InvalidOperationException("Unsupported file type");
-            }
-        }
+
     }
 }

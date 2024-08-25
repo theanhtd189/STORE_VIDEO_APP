@@ -1,7 +1,6 @@
 ﻿using Serilog;
 using System;
 using System.Diagnostics;
-using System.IO;
 
 namespace Common
 {
@@ -14,12 +13,12 @@ namespace Common
             {
                 if (_instance == null)
                 {
-                    string logFolderName = AppConfig.GetStringValue("LogFolderName")??"Logs";
+                    string logFolderName = AppConfig.GetStringValue("LogFolderName") ?? "Logs";
                     if (logFolderName.EndsWith("/"))
                     {
                         logFolderName = logFolderName.TrimEnd('/');
                     }
-                    string logExtension = AppConfig.GetStringValue("LogExtension")??"txt";
+                    string logExtension = AppConfig.GetStringValue("LogExtension") ?? "txt";
                     string time = DateTime.Now.ToString("yyyyMMdd");
                     _instance = new LoggerConfiguration()
                                     .MinimumLevel.Debug()
@@ -43,7 +42,7 @@ namespace Common
         {
             Debug.WriteLine(obj);
             Instance.Error(obj.ToString());
-            ErrorLogger.Error(obj);
+            ErrorLogger.Error("[MAIN SERVICE]: " + obj);
         }
 
         public static void Warn(object obj)
@@ -90,7 +89,7 @@ namespace Common
         {
             Debug.WriteLine(obj);
             LoggerInstance.Error(obj.ToString());
-            ErrorLogger.Error(obj);
+            ErrorLogger.Error("[VIDEO SERVICE]: " + obj);
         }
 
         public static void Warn(object obj)
@@ -123,6 +122,11 @@ namespace Common
                 }
                 return _instance;
             }
+        }
+
+        static ErrorLogger()
+        {
+            LoggerInstance.Error("================================================================================================================================");
         }
 
         public static void Info(object obj)

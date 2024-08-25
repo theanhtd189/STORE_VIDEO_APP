@@ -1,6 +1,6 @@
 ﻿using Common;
-using MediaToolkit.Model;
 using MediaToolkit;
+using MediaToolkit.Model;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -43,7 +43,9 @@ namespace CameraServices
         private string _ip;
         private string _code = "CAMERA_DEFAULT";
         private string _str1;
+#pragma warning disable CS0414 // The field 'CameraService._str2' is assigned but its value is never used
         private string _str2;
+#pragma warning restore CS0414 // The field 'CameraService._str2' is assigned but its value is never used
         private int _delayError = AppConfig.GetIntValue("CameraDelayError");
         private bool _isDeleteFileAfterUploaded = AppConfig.GetBooleanValue("IsDeleteFileAfterUploaded");
         private readonly string _userName = AppConfig.GetStringValue("CameraAdminUsername");
@@ -334,11 +336,11 @@ namespace CameraServices
             isVideoCorrupted = false;
             try
             {
-                if (_lDownHandle >= 0)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               if (_lDownHandle >= 0)
-                {
-                    VideoLogger.Info("Downloading, please stop firstly!");//Please stop downloading
-                    return null;
-                }
+                if (_lDownHandle >= 0) if (_lDownHandle >= 0)
+                    {
+                        VideoLogger.Info("Downloading, please stop firstly!");//Please stop downloading
+                        return null;
+                    }
 
                 CHCNetSDK.NET_DVR_PLAYCOND struDownPara = new CHCNetSDK.NET_DVR_PLAYCOND();
                 struDownPara.dwChannel = (uint)_channel; //Channel number  
@@ -405,11 +407,11 @@ namespace CameraServices
                         //Tính xem 50% thời lượng của video gốc là bao nhiêu
                         TimeSpan fiftyPercentOfA = TimeSpan.FromTicks(expectedDuration.Ticks / 2);
 
-                        if(expectedDuration == actualDuration)
+                        if (expectedDuration == actualDuration)
                         {
                             VideoLogger.Info($"Video duration: {actualDuration}");
-                        } 
-                        else 
+                        }
+                        else
                         if (difference > fiftyPercentOfA)
                         {
                             //Nếu thời lượng chênh nhau quá 50% thì video render ra đang bị corrupted
@@ -450,7 +452,7 @@ namespace CameraServices
             catch (Exception ex)
             {
                 VideoLogger.Error(ex);
-                return new TimeSpan(0,0,0,0);
+                return new TimeSpan(0, 0, 0, 0);
             }
         }
 

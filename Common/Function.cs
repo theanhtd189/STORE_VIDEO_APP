@@ -1,33 +1,38 @@
 ﻿using Common.Model;
 using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Net.Sockets;
 using System.Net;
-using System.Text;
-using System.Threading.Tasks;
+using System.Net.Sockets;
 
 namespace Common
 {
     public static class Function
     {
+        static readonly string logfilePath = $@"C:\StoreVideo\Logs\{DateTime.Now:yyyyMMdd}\AppInitLog.txt";
         public static void WriteLog(string content)
         {
             try
             {
-                string filePath = $@"D:\StoreVideoLog_{DateTime.Now.ToString("ddMMyyyy")}.txt";
+                string directoryPath = Path.GetDirectoryName(logfilePath);
 
-                // Tạo file nếu chưa tồn tại và ghi nội dung vào file
-                using (StreamWriter writer = new StreamWriter(filePath, true))
+                // Check if the directory exists
+                if (!Directory.Exists(directoryPath))
+                {
+                    // Create the directory if it doesn't exist
+                    Directory.CreateDirectory(directoryPath);
+                }
+
+                using (StreamWriter writer = new StreamWriter(logfilePath, true))
                 {
                     writer.WriteLine(content);
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                //
+                Console.WriteLine($"WriteLog ex {ex.Message}");
+                Debug.WriteLine($"WriteLog ex {ex.Message}");
             }
         }
 
@@ -42,7 +47,7 @@ namespace Common
             {
                 return false;
             }
-            catch (Exception) 
+            catch (Exception)
             {
                 return false;
             }
@@ -80,7 +85,6 @@ namespace Common
 
         }
     }
-
     public class ServerTime
     {
         private DateTime startTime;
@@ -94,12 +98,14 @@ namespace Common
             // Assuming server time is also the current UTC time
             // If the server time is different, adjust this accordingly
             var serverTime = DateTime.Now;
+#pragma warning disable CS0168 // Variable is declared but never used
             try
             {
                 const int tryTimes = 5;
                 int currentTryTimes = 0;
                 while (currentTryTimes < tryTimes)
                 {
+#pragma warning disable CS0168 // Variable is declared but never used
                     try
                     {
                         serverTime = GetNetworkTime();
@@ -110,6 +116,7 @@ namespace Common
                         //MessageBox.Show(ex.ToString());
                         currentTryTimes++;
                     }
+#pragma warning restore CS0168 // Variable is declared but never used
                 }
 
             }
@@ -117,6 +124,7 @@ namespace Common
             {
 
             }
+#pragma warning restore CS0168 // Variable is declared but never used
 
             // Calculate the time difference
             offset = serverTime - startTime;

@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -67,16 +66,11 @@ namespace CameraServices
         /// Có xóa file gốc sau khi upload thành công không
         /// </summary>
         private bool _isDeleteOFileAfterUploaded = AppConfig.GetBooleanValue("IsDeleteOriginalFileAfterUploaded");
-        
+
         /// <summary>
         /// Có xóa file đã nén sau khi upload thành công không
         /// </summary>
         private bool _isDeleteRFileAfterUploaded = AppConfig.GetBooleanValue("IsDeleteResizedFileAfterUploaded");
-
-        /// <summary>
-        /// Luồng có đang xử lý video nào không
-        /// </summary>
-        private bool _isProcessingVideo = false;
 
         /// <summary>
         /// Tên của Pipe Service đích 
@@ -88,7 +82,7 @@ namespace CameraServices
         /// <summary>
         /// Khởi tạo các sự kiện cho Pipe service
         /// </summary>
-        private async void InitializeEvent()
+        private async void InitializePipeServiceEvent()
         {
             try
             {
@@ -206,7 +200,7 @@ namespace CameraServices
 
         private void btnLogin_Click(object sender, EventArgs e)
         {
-            Login();
+            LoginCamera();
         }
 
         private void listViewIPChannel_ItemSelectionChanged(object sender, ListViewItemSelectionChangedEventArgs e)
@@ -222,19 +216,18 @@ namespace CameraServices
 
         public Main()
         {
-            VideoLogger.Info($"================================================================");
+            VideoLogger.Info($"================================================================================================================================");
             VideoLogger.Info("Start video service");
             InitializeComponent();
-            InitSystemInfo();
-            Login();
-            InitializeEvent();
+            InitializeSystemInfo();
+            InitializePipeServiceEvent();
             Task.Run(() =>
             {
                 ProcessDataInQueueAsync();
             });
         }
 
-        private void InitSystemInfo()
+        private void InitializeSystemInfo()
         {
             m_bInitSDK = CHCNetSDK.NET_DVR_Init();
             if (m_bInitSDK == false)
@@ -248,9 +241,10 @@ namespace CameraServices
                 CHCNetSDK.NET_DVR_SetLogToFile(3, "C:\\SdkLog\\", true);
                 iChannelNum = new int[96];
             }
+            LoginCamera();
         }
 
-        private bool Login()
+        private bool LoginCamera()
         {
             if (m_lUserID < 0)
             {
@@ -597,96 +591,100 @@ namespace CameraServices
 
         private async void ProcessDataInQueueAsync()
         {
+            bool isError;
+            bool isProcessingVideo = false;
             while (true)
             {
                 try
                 {
-                    while (_queueMain.Count > 0 && _isProcessingVideo == false)
+                    while (_queueMain.Count > 0 && isProcessingVideo == false)
                     {
-                        var session = _queueMain.Dequeue();
-                        Order order = session.CurrentOrder;
+                        isError = false;
+                        isProcessingVideo = true;
+                        Session session = _queueMain.Dequeue();
+                        Order order = session?.CurrentOrder;
                         if (order != null)
                         {
                             try
                             {
-                                _isProcessingVideo = true;
-
-                                Camera camera = session.Cameras?.FirstOrDefault();
-                                if (camera != null)
+                                foreach (Camera camera in session.Cameras)
                                 {
-                                    m_code = camera.Code;
-                                    m_channel = (uint)camera.CameraChannel;
+                                    if (camera != null)
+                                    {
+                                        m_code = camera.Code;
+                                        m_channel = (uint)camera.CameraChannel;
 
-                                    //Video model để upload api
-                                    Video videoUpload = new Video
-                                    {
-                                        Code = $"vid_{order.OrderCode}",
-                                        OrderCode = order.OrderCode,
-                                        OrderId = order.OrderId,
-                                        StartTime = order.StartTime,
-                                        EndTime = order.EndTime,
-                                        CameraCode = camera.Code,
-                                        ListCamera = session.Cameras,
-                                        VideoPaths = new List<string>(),
-                                    };
-
-                                    //string videoPath = "D:\\StoreVideo\\CAMERA_DEFAULT\\17082024-022901-023001-44.mp4";
-                                    string videoPath = GetPathForVideoUpload(order.StartTime, order.EndTime);
-                                    if (!string.IsNullOrEmpty(videoPath))
-                                    {
-                                        videoUpload.VideoPaths.Add(videoPath);
-                                    }
-                                    else
-                                    {
-                                        //download loi, cho vao queue ti nua download lai
-                                        _isProcessingVideo = false;
-                                        _queueMain.Enqueue(session);
-                                    }
-
-                                    if (videoUpload.VideoPaths.Count > 0)
-                                    {
-                                        //Call API upload
-                                        var uploadVideo = await CallApiUploadVideoAsync(videoUpload);
-                                        if (uploadVideo)
+                                        //Video model để upload api
+                                        Video videoUpload = new Video
                                         {
-                                            VideoLogger.Info($"OrderCode = {order.OrderCode} => DONE");
-                                            VideoLogger.Info($"================================================================");
-                                            _isProcessingVideo = false;
-                                            if (_isDeleteRFileAfterUploaded)
+                                            Code = $"vid_{order.OrderCode}",
+                                            OrderCode = order.OrderCode,
+                                            OrderId = order.OrderId,
+                                            StartTime = order.StartTime,
+                                            EndTime = order.EndTime,
+                                            CameraCode = camera.Code,
+                                            ListCamera = session.Cameras,
+                                            VideoPaths = new List<string>(),
+                                        };
+
+                                        string videoPath = GetPathForVideoUpload(order.StartTime, order.EndTime);
+                                        if (!string.IsNullOrEmpty(videoPath))
+                                        {
+                                            videoUpload.VideoPaths.Add(videoPath);
+                                            //Call API upload
+                                            bool uploadVideo = await CallApiUploadVideoAsync(videoUpload);
+                                            if (uploadVideo)
                                             {
-                                                if (!string.IsNullOrEmpty(videoPath) && File.Exists(videoPath))
+                                                VideoLogger.Info($"OrderCode = {order.OrderCode} => DONE");
+                                                VideoLogger.Info($"================================================================================================================================\n");
+                                                if (_isDeleteRFileAfterUploaded)
                                                 {
-                                                    // Clean up
-                                                    File.Delete(videoPath);
+                                                    if (!string.IsNullOrEmpty(videoPath) && File.Exists(videoPath))
+                                                    {
+                                                        // Clean up
+                                                        File.Delete(videoPath);
+                                                    }
                                                 }
+                                            }
+                                            else
+                                            {
+                                                //Lỗi call api up file
+                                                isError = true;
+                                                VideoLogger.Error("Lỗi call api up file");
                                             }
                                         }
                                         else
                                         {
-                                            //Lỗi call api up file
-                                            VideoLogger.Error("Lỗi call api up file");
-                                            _queueMain.Enqueue(session);
+                                            //download video loi
+                                            isError = true;
                                         }
                                     }
-
-                                }
-                                else
-                                {
-                                    VideoLogger.Warn("ProcessDataInQueueAsync => Camera=NULL");
-                                    VideoLogger.Error("Không có thông tin camera");
+                                    else
+                                    {
+                                        VideoLogger.Error("ProcessDataInQueueAsync => Camera=NULL");
+                                        VideoLogger.Error("Không có thông tin camera");
+                                    }
                                 }
                             }
                             catch (Exception ex)
                             {
-                                _queueMain.Enqueue(session);
+                                isError = true;
                                 VideoLogger.Error($"{ex.Message}");
                                 Thread.Sleep(_delayErrorJobTime * 1000);
                             }
                         }
                         else
                         {
+                            isError = true;
                             VideoLogger.Error("ProcessDataInQueueAsync => ORDER=NULL");
                         }
+
+                        if (isError)
+                        {
+                            //Nếu có lỗi thì add lại vào queue, tí xử lý lại đơn đó
+                            _queueMain.Enqueue(session);
+                        }
+                        isProcessingVideo = false;
                     }
                 }
                 catch (Exception ex)
@@ -703,8 +701,7 @@ namespace CameraServices
         private string GetPathForVideoUpload(DateTime startTime, DateTime endTime)
         {
             string originalVideoPath = "";
-            long sizeFile = 0;
-            int retryMax = 5;
+            int retryMax = AppConfig.GetIntValue("ErrorDownloadVideoRetry");
             int retry = 1;
             try
             {
@@ -718,7 +715,7 @@ namespace CameraServices
                     originalVideoPath = DownloadOriginalVideo(startTime, endTime);
                     if (!string.IsNullOrEmpty(originalVideoPath) && File.Exists(originalVideoPath))
                     {
-                        sizeFile = new FileInfo(originalVideoPath).Length;
+                        long sizeFile = new FileInfo(originalVideoPath).Length;
                         if (sizeFile > 0)
                         {
                             return GetResizedVideoPath(originalVideoPath);
@@ -748,7 +745,7 @@ namespace CameraServices
                     }
                 }
             }
-            return "";
+            return null;
         }
 
         private async Task<bool> CallApiUploadVideoAsync(Video videoUpload)

@@ -1,10 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Xml;
 
 namespace Common
@@ -24,37 +20,33 @@ namespace Common
             }
         }
         public static bool IsTestEnviroment => AppConfig.GetBooleanValue("EnableTest");
-        public static string APIHostName =>  AppConfig.GetStringValue("APIHostName");
-        public static string CameraHostName =>  AppConfig.GetStringValue("CameraAdminIP");
+        public static string APIHostName => AppConfig.GetStringValue("APIHostName");
+        public static string CameraHostName => AppConfig.GetStringValue("CameraAdminIP");
 
         private static NameValueCollection GetAppConfig()
         {
             NameValueCollection appSettings = new NameValueCollection();
             try
             {
-                Function.WriteLog("GetAppConfig ");
+                Function.WriteLog($"\n================================================================");
+                Function.WriteLog($"START TIME: {ServerTimeHelper.GetUnixTimeSeconds()}");
+                Function.WriteLog("GetAppConfig()");
                 string appConfigName = "AppConfig.xml";
                 string currentDirectory = Directory.GetCurrentDirectory();
-                Function.WriteLog("currentDirectory "+ currentDirectory);
-                // Đường dẫn đến file AppConfig.xml
+                Function.WriteLog("Directory.GetCurrentDirectory(): " + currentDirectory);
                 string configFilePath = Path.Combine(currentDirectory, appConfigName);
-                Function.WriteLog("configFilePath " + configFilePath);
                 if (!File.Exists(configFilePath))
                 {
-                    Function.WriteLog("Not found AppConfig.xml");
+                    Function.WriteLog($"Not found {configFilePath}");
                     return appSettings;
                 }
                 else
                 {
-                    Function.WriteLog("Found AppConfig.xml");
+                    Function.WriteLog($"Read data from {configFilePath}");
                 }
 
-                // Tạo XmlDocument để đọc file cấu hình
                 XmlDocument xmlDocument = new XmlDocument();
                 xmlDocument.Load(configFilePath);
-
-                // Nạp cấu hình vào NameValueCollection
-
                 foreach (XmlNode node in xmlDocument.SelectNodes("configuration/appSettings/add"))
                 {
                     if (node.Attributes["key"] != null && node.Attributes["value"] != null)

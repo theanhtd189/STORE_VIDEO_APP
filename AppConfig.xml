@@ -3,7 +3,7 @@
 	<appSettings>
 		<!-- LOG SERVICE -->
 		<!--Tên folder chứa file log-->
-		<add key="LogFolderName" value="D://StoreVideo/Logs" />		
+		<add key="LogFolderName" value="C://StoreVideo/Logs" />		
 		<!--Định dạng của file log-->
 		<add key="LogExtension" value="txt" />
 		<!-- END LOG SERVICE -->
@@ -23,9 +23,11 @@
 		<!--Số giây (s) delay để thực hiện lại job khi job đó bị lỗi -->
 		<add key="DelayErrorJobTime" value="10" />
 		<!--Có xóa file gốc sau khi upload lên API thành công không-->
-		<add key="IsDeleteOriginalFileAfterUploaded" value="0" />				
+		<add key="IsDeleteOriginalFileAfterUploaded" value="1" />				
 		<!--Có xóa file đã nén sau khi upload lên API thành công không-->
-		<add key="IsDeleteResizedFileAfterUploaded" value="0" />		
+		<add key="IsDeleteResizedFileAfterUploaded" value="1" />		
+		<!--Số lần thử lại khi download video lỗi-->
+		<add key="ErrorDownloadVideoRetry" value="3" />	
 		<!-- END VIDEO SERVICE -->
 
 		<!-- SCANNER SERVICE -->
@@ -54,7 +56,7 @@
 		<!-- API SERVICE -->
 		<!--http://rezkin.ddns.net-->
 		<!--https://vidsto-api.uro-solution.info/-->
-		<add key="APIHostName" value="http://192.168.1.39" />
+		<add key="APIHostName" value="http://192.168.1.39/" />
 		<add key="APIAdminUsername" value="Admin@gmail.com" />
 		<add key="APIAdminPassword" value="P@ssw0rd" />
 		<!-- END API SERVICE -->
